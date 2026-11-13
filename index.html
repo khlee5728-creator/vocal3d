@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Articulation in 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Lora:ital@0;1&family=Space+Grotesk:wght@400;600;700&family=Noto+Serif+KR:wght@300;500&display=swap" rel="stylesheet" />
+<style>
+  :root { --paper: #faf8f3; --ink: #1c1a17; --body: #3d3a34; --muted: #8d8574; --line: #d9d2c2; --accent: #24513f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); font-family: 'Lora', 'Noto Serif KR', serif; }
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 372px; height: 100vh; }
+  .stage { position: relative; min-height: 0; background: radial-gradient(circle at 42% 42%, #fffdf9 0%, #f4efe5 78%, #ece5d8 100%); }
+  #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+  #view:active { cursor: grabbing; }
+  .tag { position: absolute; font: 600 10px 'Space Grotesk'; letter-spacing: 0.16em; color: var(--ink); white-space: nowrap;
+    transform: translate(-50%, -50%); pointer-events: none; text-shadow: 0 0 4px var(--paper), 0 0 4px var(--paper), 0 0 6px var(--paper); }
+  #leaders { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
+  #leaders line { stroke: var(--ink); stroke-width: 0.9; opacity: 0.75; } #leaders circle { fill: var(--ink); }
+  .hint { position: absolute; left: 20px; top: 16px; font: 600 10.5px 'Space Grotesk'; letter-spacing: 0.2em; color: var(--accent); pointer-events: none; }
+  .hint span { display: block; margin-top: 6px; font: italic 400 13px 'Lora'; letter-spacing: 0; color: var(--muted); }
+  .front { position: absolute; left: 16px; bottom: 16px; width: 210px; height: 232px; border: 1px solid var(--line); border-top: 1px solid var(--ink); pointer-events: none; }
+  .front .cap { position: absolute; left: 1px; bottom: calc(100% + 6px); font: 600 10px 'Space Grotesk'; letter-spacing: 0.18em; color: var(--muted); white-space: nowrap; }      /* 상자 위에 붙인다: 안에 두면 머리카락·모자와 겹친다 */
+  .voice { position: absolute; right: 18px; bottom: 18px; font: 600 10.5px 'Space Grotesk'; letter-spacing: 0.18em; color: var(--muted); text-align: right; background: var(--paper); padding: 7px 10px; border-top: 1px solid var(--ink); }
+  .voice b { display: block; font: 600 13px 'Space Grotesk'; letter-spacing: 0.16em; color: var(--accent); margin-top: 3px; }
+  .panel { border-left: 1px solid var(--line); padding: 60px 22px 16px; overflow-y: auto; }
+  .kick { font: 600 10.5px 'Space Grotesk'; letter-spacing: 0.24em; color: var(--accent); }
+  h1 { font: 600 30px/1.15 'Playfair Display', serif; margin: 8px 0 14px; }
+  .now { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line); padding: 12px 0 12px; display: grid; grid-template-columns: 84px 1fr; column-gap: 12px; align-items: center; }
+  .now .sym { font: 400 46px/1 'Lora'; text-align: center; }
+  .now .desc { font: 600 11px/1.5 'Space Grotesk'; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+  .now .word { font: italic 400 17px 'Lora'; color: var(--body); margin-top: 4px; }
+  .now .note { grid-column: 1 / -1; font: 400 14.5px/1.5 'Lora', 'Noto Serif KR'; color: var(--body); margin-top: 8px; }
+  /* 버튼 체계: 높이 30(기본) · 42(크게). 버튼 자체에는 바깥 여백을 두지 않고 묶음의 gap으로만 띄운다 */
+  [hidden] { display: none !important; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 30px; padding: 0 12px; margin: 0; font: 600 10.5px/1 'Space Grotesk'; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap;
+    background: transparent; border: 1px solid var(--ink); border-radius: 3px; color: var(--ink); cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.14s, color 0.14s, border-color 0.14s, box-shadow 0.14s, transform 0.08s; }
+  .btn:hover { background: rgba(28, 26, 23, 0.08); }
+  .btn:active { transform: translateY(1px); }
+  .btn.on, .btn.on:hover { background: var(--ink); color: var(--paper); }
+  .btn:focus-visible, .qopt:focus-visible, .gmode:focus-visible, .key:focus-visible, .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn:disabled { opacity: 0.32; cursor: default; pointer-events: none; }
+  .btn svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .btn.icon { width: 30px; padding: 0; }
+  .btn.big { height: 42px; padding: 0 18px; font-size: 11.5px; gap: 9px; box-shadow: 0 2px 0 rgba(28, 26, 23, 0.16); } .btn.big:active { transform: translateY(2px); box-shadow: none; } .btn.big svg { width: 17px; height: 17px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--paper); box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 62%, #000); } .btn.primary:hover { background: color-mix(in srgb, var(--accent) 80%, #000); border-color: color-mix(in srgb, var(--accent) 80%, #000); }
+  .btn.wide { width: 100%; }
+  .btn.quiet { height: auto; padding: 4px 0; border-color: transparent; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; } .btn.quiet:hover { background: none; color: var(--ink); }
+  .btn kbd { display: inline-flex; align-items: center; justify-content: center; height: 17px; min-width: 17px; padding: 0 5px; font: 600 9px/1 'Space Grotesk'; letter-spacing: 0.08em; border: 1px solid currentColor; border-radius: 3px; opacity: 0.62; }
+  /* 붙은 선택 묶음: 여럿 중 하나 */
+  .seg { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; height: 30px; border: 1px solid var(--ink); border-radius: 3px; overflow: hidden; }
+  .seg .btn { height: 100%; border: 0; border-radius: 0; } .seg .btn + .btn { border-left: 1px solid var(--ink); } .seg .btn:active { transform: none; } .seg .btn:focus-visible { outline-offset: -3px; }
+  /* 켜고 끄는 버튼: 오른쪽의 작은 스위치가 상태를 보여 준다 */
+  .tog i { position: relative; flex: none; width: 22px; height: 12px; border: 1px solid currentColor; border-radius: 7px; }
+  .tog i::after { content: ''; position: absolute; left: 2px; top: 2px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; transition: transform 0.15s; }
+  .tog.on i::after { transform: translateX(10px); }
+  .ctl { display: grid; grid-template-columns: 96px 1fr; align-items: center; margin-top: 10px; }
+  .ctl .pl, .row .pl { font: 600 9.5px 'Space Grotesk'; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 20px; margin: 0; background: none; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--ink); border-radius: 1px; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -7px; border-radius: 50%; background: var(--accent); border: 2px solid var(--paper); box-shadow: 0 0 0 1px var(--accent); transition: transform 0.12s; }
+  input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.15); }
+  input[type=range]::-moz-range-track { height: 2px; background: var(--ink); border-radius: 1px; }
+  input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--paper); box-shadow: 0 0 0 1px var(--accent); }
+  input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .grp { margin-top: 14px; }
+  .grp .lab { font: 600 10px 'Space Grotesk'; letter-spacing: 0.2em; color: var(--muted); margin-bottom: 5px; }
+  .row { display: grid; grid-template-columns: 96px 1fr; align-items: center; border-top: 1px solid var(--line); padding: 3px 0; }
+  .keys { display: flex; flex-wrap: wrap; gap: 3px; }
+  .key { font: 400 18px/1 'Lora'; min-width: 34px; height: 32px; padding: 0 6px; background: none; border: 1px solid transparent; border-radius: 3px; color: var(--ink); cursor: pointer; transition: background-color 0.12s, border-color 0.12s, color 0.12s; }
+  .key:hover { border-color: var(--muted); }
+  .key.on { border-color: var(--accent); background: var(--accent); color: var(--paper); }
+  .qhelp { font: 400 14px/1.5 'Lora', 'Noto Serif KR'; color: var(--body); margin: 10px 0 10px; }
+  .qopts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  /* 보기 카드: 아래쪽 단이 있는 눌리는 카드. 왼쪽 위 작은 칸은 숫자 키(답을 고른 뒤에는 판정 표시) */
+  .qopt { position: relative; display: grid; grid-template-columns: auto 1fr; column-gap: 12px; align-items: baseline; text-align: left; padding: 9px 12px 10px; background: #fffdf9; border: 1px solid #c9c1ae; border-radius: 5px; box-shadow: 0 2px 0 #c9c1ae;
+    color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: border-color 0.14s, box-shadow 0.14s, transform 0.1s, opacity 0.2s; }
+  .qopt .n { grid-column: 1 / -1; justify-self: start; display: inline-flex; align-items: center; justify-content: center; height: 18px; min-width: 18px; padding: 0 5px; margin-bottom: 4px; font: 600 9.5px/1 'Space Grotesk'; letter-spacing: 0.12em; text-indent: 0.12em;
+    color: var(--muted); border: 1px solid #c9c1ae; border-radius: 3px; transition: color 0.14s, border-color 0.14s; }
+  .qopt .s { font: 400 30px/1.1 'Lora'; } .qopt .w { font: italic 400 14px 'Lora'; color: var(--body); }
+  .qopt:hover:not(:disabled) { border-color: var(--ink); box-shadow: 0 4px 0 var(--ink); transform: translateY(-2px); } .qopt:hover:not(:disabled) .n { color: var(--ink); border-color: var(--ink); }
+  .qopt:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 1px 0 var(--ink); }
+  .qopt:disabled { cursor: default; box-shadow: none; }
+  .qopt.ok, .qopt.ans { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); } .qopt.ok .n { background: var(--accent); border-color: var(--accent); color: var(--paper); } .qopt.ans .n { border-color: var(--accent); color: var(--accent); }
+  .qopt.no { border-color: var(--ink); } .qopt.no .n { border-color: var(--ink); color: var(--ink); } .qopt.no .s { text-decoration: line-through; text-decoration-thickness: 1px; } .qopt.dim { opacity: 0.45; }
+  .qopt.ok::after, .qopt.ans::after, .qopt.no::after { content: ''; position: absolute; right: 12px; top: 50%; width: 24px; height: 24px; margin-top: -12px; border-radius: 50%; background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23faf8f3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 8.6l3 3 5.8-7'/%3E%3C/svg%3E") center / 14px no-repeat; }
+  .qopt.no::after { background-color: transparent; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231c1a17' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8'/%3E%3C/svg%3E"); box-shadow: inset 0 0 0 1px var(--ink); }
+  .qfb { font: 400 14.5px/1.5 'Lora', 'Noto Serif KR'; color: var(--body); min-height: 66px; margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+  .qfb b { display: block; font: 600 10.5px 'Space Grotesk'; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 2px; }
+  .qhud { display: grid; grid-template-columns: 1.3fr 1fr 1fr; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line); margin-top: 2px; }
+  .qhud > div { position: relative; padding: 7px 0 6px; } .qhud > div + div { border-left: 1px solid var(--line); padding-left: 12px; }
+  .qhud span { display: block; font: 600 9.5px 'Space Grotesk'; letter-spacing: 0.18em; color: var(--muted); }
+  .qhud b { display: inline-block; font: 600 26px/1.15 'Playfair Display', serif; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .qhud b.pop { animation: qpop 0.45s ease-out; } .qhud small { font: 600 11px 'Space Grotesk'; letter-spacing: 0.1em; color: var(--accent); margin-left: 6px; }
+  .qplus { position: absolute; left: 0; top: 50px; white-space: nowrap; font: 600 15px 'Space Grotesk'; letter-spacing: 0.06em; color: var(--accent); pointer-events: none; opacity: 0; }
+  .qplus.go { animation: qfloat 1.1s ease-out; }
+  .qpips { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; margin: 10px 0 6px; }
+  .qpips i { height: 7px; border: 1px solid var(--line); } .qpips i.cur { border-color: var(--ink); border-bottom-width: 3px; } .qpips i.ok { background: var(--accent); border-color: var(--accent); }
+  .qpips i.no { border-color: var(--ink); }
+  .qtimer { height: 2px; background: var(--line); margin-bottom: 10px; overflow: hidden; } .qtimer i { display: block; height: 100%; background: var(--accent); transform-origin: left center; }
+  .qopt { position: relative; } .qopt.ok { animation: qpop 0.45s ease-out; } .qopt.no { animation: qshake 0.4s ease-in-out; }
+  .qspark { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; pointer-events: none; animation: qspark 0.7s ease-out forwards; }
+  .qend { grid-column: 1 / -1; border-top: 1px solid var(--ink); padding: 12px 0 4px; }
+  .qend .qpic { display: block; width: 100%; height: auto; aspect-ratio: 680 / 359; margin: 0 0 10px; }
+  .qend h2 { font: italic 600 26px/1.2 'Playfair Display', serif; margin: 2px 0 8px; } .qend p { font: 400 14.5px/1.55 'Lora', 'Noto Serif KR'; color: var(--body); margin: 0 0 4px; }
+  .qend .k { font: 600 9.5px 'Space Grotesk'; letter-spacing: 0.18em; color: var(--accent); }
+  .qstat { font: 600 9.5px 'Space Grotesk'; letter-spacing: 0.16em; color: var(--muted); margin: 8px 0 0; text-transform: uppercase; }
+  .qpips.lives { grid-template-columns: repeat(3, 30px); } .qpips.none { display: none; }
+  /* 말풍선: 정면 인셋의 캐릭터가 하는 말. 꼬리 끝이 인셋 안 입꼬리에 닿고 풍선은 상자 테두리를 걸친다. 자리와 꼬리 길이(--tl)는 say()가 잡는다 */
+  .bubble { --bl: var(--ink); --bf: #fffdf9; --bc: var(--ink); position: absolute; left: 246px; bottom: 100px; z-index: 7; display: flex; align-items: center; gap: 8px; max-width: 250px; padding: 9px 16px 10px 13px;
+    background: var(--bf); border: 1.5px solid var(--bl); border-radius: 17px; font: italic 400 17px/1.25 'Lora'; color: var(--bc); filter: drop-shadow(0 3px 0 rgba(28, 26, 23, 0.14)); opacity: 0; pointer-events: none; transform-origin: calc(2.5px - var(--tl, 40px)) calc(50% + 8px); }
+  .bubble .tail { position: absolute; overflow: visible; } .bubble .tail .f { fill: var(--bf); stroke: none; } .bubble .tail .s { fill: none; stroke: var(--bl); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .bubble .ts { left: calc(2.5px - var(--tl, 40px)); bottom: calc(50% - 11px); width: var(--tl, 40px); height: 20px; }
+  .bubble .tu { display: none; left: var(--tx, 30px); top: -27.5px; width: 18px; height: 30px; }      /* 결과 화면: 풍선이 인셋 안 턱 아래에 놓이고 꼬리가 위로 입을 가리킨다 */
+  .bubble.dn { transform-origin: calc(var(--tx, 30px) + 7px) -26px; } .bubble.dn .ts { display: none; } .bubble.dn .tu { display: block; }
+  .bubble .bi { display: none; flex: none; width: 20px; height: 20px; border-radius: 50%; background: center / 12px no-repeat; }
+  .bubble.k-ok { --bl: var(--accent); } .bubble.k-ok .bi { display: block; background-color: var(--accent); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23faf8f3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 8.6l3 3 5.8-7'/%3E%3C/svg%3E"); }
+  .bubble.k-combo, .bubble.k-win, .bubble.k-unlock { --bl: var(--accent); --bf: var(--accent); --bc: var(--paper); } .bubble.k-combo .bi, .bubble.k-win .bi, .bubble.k-unlock .bi { display: block; margin: 0 -2px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23faf8f3'%3E%3Cpath d='M8 .8C8.7 5 11 7.3 15.2 8 11 8.7 8.7 11 8 15.2 7.3 11 5 8.7.8 8 5 7.3 7.3 5 8 .8Z'/%3E%3C/svg%3E"); background-size: 19px; border-radius: 0; }
+  .bubble.k-life .bi { display: block; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231c1a17' stroke-width='1.9' stroke-linecap='round'%3E%3Cpath d='M8 4.2v4.6M8 11.6v.2'/%3E%3C/svg%3E"); background-size: 14px; box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .bubble.on { animation: bin 0.42s cubic-bezier(0.2, 0.9, 0.3, 1) forwards; } .bubble.off { animation: bout 0.2s ease-in forwards; }
+  .bubble.k-combo.on .bi, .bubble.k-win.on .bi, .bubble.k-unlock.on .bi { animation: bspin 0.7s ease-out; }
+  .conf { position: absolute; z-index: 5; top: -14px; width: 7px; height: 11px; pointer-events: none; animation: conf linear forwards; }
+  .qrew { margin-top: 14px; border-top: 1px solid var(--ink); padding-top: 9px; }
+  .qrew summary { font: 600 10px 'Space Grotesk'; letter-spacing: 0.18em; color: var(--accent); cursor: pointer; }
+  .qbar { height: 3px; background: var(--line); margin: 9px 0 0; } .qbar i { display: block; height: 100%; background: var(--accent); }
+  .qsw { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0 0; } .qsw .pl { width: 52px; font: 600 9.5px 'Space Grotesk'; letter-spacing: 0.14em; color: var(--muted); }
+  .qsw .qsw { flex: 1; } .qsw .btn { height: 26px; padding: 0 8px; font-size: 9.5px; letter-spacing: 0.1em; } #swAcc { gap: 5px; } .qsw .btn:disabled, .sw:disabled { opacity: 0.28; cursor: default; }
+  .sw { width: 24px; height: 24px; padding: 0; border: 1px solid rgba(28, 26, 23, 0.5); border-radius: 50%; cursor: pointer; transition: transform 0.1s, box-shadow 0.14s; } .sw:hover:not(:disabled) { transform: scale(1.12); }
+  .sw.on { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink); }
+  .qbadges { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 11px 0 4px; }
+  .qbadge { border: 1px solid var(--line); padding: 5px 6px; font: 600 9.5px/1.35 'Space Grotesk'; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; display: grid; grid-template-columns: 46px 1fr; column-gap: 8px; align-items: center; }
+  .qbadge img { width: 46px; height: 46px; display: block; filter: grayscale(1); opacity: 0.3; } .qbadge.got img { filter: none; opacity: 1; }
+  .qnew { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; } .qnew figure { margin: 0; width: 74px; text-align: center; font: 600 9px/1.3 'Space Grotesk'; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; }
+  .qnew img { width: 66px; height: 66px; display: block; margin: 0 auto 4px; animation: qpop 0.6s ease-out; }
+  .qbadge span { display: block; font: 400 12px/1.3 'Lora'; letter-spacing: 0; text-transform: none; } .qbadge.got { border-color: var(--accent); color: var(--accent); } .qbadge.got span { color: var(--body); }
+  /* ── Practice 전용 게임 화면 ── */
+  .wrap { position: relative; }
+  .modebar { position: absolute; top: 14px; right: 22px; z-index: 8; width: 328px; }      /* Explore: 오른쪽 칸 맨 위의 한 줄을 통째로 쓴다 */
+  .tools { margin-top: 12px; } .trow { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ctl .seg, .ctl .trow { width: 100%; max-width: 232px; } .ctl .tog { flex: 1; justify-content: space-between; }      /* 시점 묶음 · 토글 줄 · 슬라이더의 좌우 끝을 맞춘다 */
+  .wrap.game { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .wrap.game .panel, .wrap.game .hint { display: none; }
+  /* 위쪽 띠: 모든 버튼이 같은 높이로 한 줄의 가운데에 놓인다(모드 전환 버튼도 이 줄 안으로 들어온다) */
+  .ghud { position: absolute; left: 0; right: 0; top: 0; z-index: 4; height: 58px; display: flex; align-items: center; gap: 20px; padding: 0 18px; background: rgba(250, 248, 243, 0.94); border-bottom: 1px solid var(--line); }
+  .ghud .modebar { position: static; width: auto; } .gright { display: flex; align-items: center; gap: 8px; } .gsp { flex: 1; }
+  .btn.chip { border-color: var(--accent); color: var(--accent); padding-right: 9px; } .btn.chip:hover { background: var(--accent); color: var(--paper); }
+  #qSfx .s-off, #qSfx.off .s-on { display: none; } #qSfx.off .s-off { display: block; } #qSfx.off { color: var(--muted); border-color: var(--muted); }
+  .gnum { position: relative; min-width: 64px; } .gnum.streak { min-width: 118px; } .gnum span { display: block; font: 600 9px 'Space Grotesk'; letter-spacing: 0.18em; color: var(--muted); }
+  .gnum b { display: inline-block; font: 600 24px/1.1 'Playfair Display', serif; font-variant-numeric: tabular-nums; } .gnum b.pop { animation: qpop 0.45s ease-out; }
+  .gnum small { font: 600 10.5px 'Space Grotesk'; letter-spacing: 0.08em; color: var(--accent); margin-left: 6px; }
+  .gprog { min-width: 190px; } .gprog .qstat { margin: 0 0 5px; } .gprog .qpips { margin: 0; }
+  .ghud .qtimer { position: absolute; left: 0; right: 0; bottom: -2px; height: 3px; margin: 0; background: transparent; }
+  /* 보기 도구: 한 칸 폭에 맞춘 세로 묶음 */
+  .gtools { position: absolute; right: 14px; top: 72px; z-index: 3; width: 156px; background: rgba(250, 248, 243, 0.94); border: 1px solid var(--line); border-top: 1px solid var(--ink); padding: 10px; }
+  .gtools #tplay { display: none; } .gtools .tools { display: grid; gap: 10px; margin: 0; }
+  .gtools .ctl { display: block; margin: 0; } .gtools .ctl .pl { display: block; margin-bottom: 6px; }
+  .gtools .seg { display: grid; grid-template-columns: repeat(3, 1fr); } .gtools .seg .btn { padding: 0; letter-spacing: 0.1em; }
+  .gtools .trow { display: grid; gap: 6px; } .gtools .tog { justify-content: space-between; width: 100%; padding: 0 10px; }
+  .wrap.game .voice { bottom: 14px; right: 184px; } .wrap.game .front { bottom: 14px; }
+  .dock { border-top: 1px solid var(--ink); background: var(--paper); padding: 12px 18px 16px; }
+  .dock-top { display: flex; align-items: center; gap: 18px; min-height: 62px; }
+  .dock .qfb { flex: 1; min-height: 0; margin: 0; border: 0; padding: 0; font-size: 15px; } .dock .qfb b { font-size: 11px; }
+  .dock-act { display: flex; gap: 8px; flex: none; } #gReplay { min-width: 124px; } #qNext { min-width: 190px; }
+  .dock .qopts { grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 10px; }
+  .dock .qopt { padding: 10px 44px 12px 14px; min-height: 86px; align-content: center; } .dock .qopt .s { font-size: 40px; } .dock .qopt .w { font-size: 16px; }
+  /* 배경 가림막: 카드나 서랍이 열려 있는 동안 뒤를 어둡게 한다. 점수 띠 아래·카드 위(서랍이 열리면 화면 전체, 서랍 바로 아래). 정면 인셋 자리는 뚫어 캐릭터를 밝게 둔다(syncScrim) */
+  .gscrim { position: absolute; inset: 0; z-index: 3; background: rgba(28, 26, 23, 0.42); opacity: 0; visibility: hidden; transition: opacity 0.22s ease, visibility 0s 0.22s; }
+  .gscrim.on { opacity: 1; visibility: visible; transition: opacity 0.22s ease; } .gscrim.over { position: fixed; z-index: 8; }
+  .gcard { box-shadow: 0 10px 30px rgba(28, 26, 23, 0.22); } .gdrawer { box-shadow: -10px 0 30px rgba(28, 26, 23, 0.2); }
+  .gcard { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); z-index: 6; width: min(540px, 92%); max-height: 84%; overflow-y: auto; background: var(--paper); border: 1px solid var(--ink); padding: 18px 22px 22px; }
+  .gcard .k, .gdrawer .k { font: 600 10px 'Space Grotesk'; letter-spacing: 0.2em; color: var(--accent); } .gcard h2 { font: 600 28px/1.15 'Playfair Display', serif; margin: 6px 0 8px; }
+  .gcard p { font: 400 14.5px/1.5 'Lora', 'Noto Serif KR'; color: var(--body); margin: 0 0 6px; }
+  .gsec { font: 600 9.5px 'Space Grotesk'; letter-spacing: 0.18em; color: var(--muted); margin: 16px 0 7px; }
+  .gmodes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .gmode { position: relative; display: flex; flex-direction: column; justify-content: flex-start; text-align: left; padding: 10px 12px 12px; background: #fffdf9; border: 1px solid #c9c1ae; border-radius: 5px; box-shadow: 0 2px 0 #c9c1ae; color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: border-color 0.14s, box-shadow 0.14s; }
+  .gmode b { display: block; padding-right: 18px; font: 600 11px 'Space Grotesk'; letter-spacing: 0.14em; text-transform: uppercase; } .gmode span { display: block; font: 400 12.5px/1.35 'Lora'; color: var(--body); margin-top: 5px; }
+  .gmode::after { content: ''; position: absolute; right: 10px; top: 10px; width: 12px; height: 12px; border: 1px solid #b3ab98; border-radius: 50%; transition: border-color 0.14s, background-color 0.14s; }
+  .gmode:hover { border-color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
+  .gmode.on, .gmode.on:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); } .gmode.on b { color: var(--accent); } .gmode.on::after { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 2.5px #fffdf9; }
+  #qLevels { display: flex; flex-wrap: wrap; gap: 6px; } .gcard .qhelp { margin: 10px 0 14px; min-height: 42px; }
+  .gcard .qend { border: 0; padding: 0; } .gcard .qend h2 { font-style: italic; } .gact { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; } .gact .btn { flex: 1 1 auto; } .gact .btn.primary { flex: 2 1 auto; }
+  .gdrawer { position: absolute; top: 0; right: 0; bottom: 0; z-index: 9; width: min(372px, 94%); background: var(--paper); border-left: 1px solid var(--ink); padding: 14px 20px 18px; overflow-y: auto; }
+  .gdrawer .ghead { display: flex; justify-content: space-between; align-items: center; }
+  .gdrawer h2 { font: 600 24px/1.2 'Playfair Display', serif; margin: 6px 0 2px; } .gdrawer .btn.quiet { margin-top: 10px; }
+  @media (max-width: 1060px) { .ghud { gap: 14px; } .gnum.best { display: none; } .gprog { min-width: 150px; } }
+  @media (max-width: 900px) {
+    .wrap.game { grid-template-rows: minmax(46vh, 1fr) auto; height: 100vh; }
+    .ghud { height: auto; flex-wrap: wrap; gap: 6px 12px; padding: 48px 10px 10px; } .ghud .gsp { display: none; }
+    .ghud .btn.chip { position: absolute; left: 10px; top: 9px; } .ghud .modebar { position: absolute; right: 10px; top: 9px; }
+    .gnum { min-width: 48px; } .gnum.streak { min-width: 0; } .gnum b { font-size: 19px; } .gprog { flex: 1; min-width: 104px; } .gright { margin-left: auto; } #gRank { width: 30px; padding: 0; } #gRank span { display: none; }
+    .gtools { top: 104px; left: 8px; right: 8px; width: auto; padding: 6px 8px; } .gtools .tools { display: flex; align-items: center; gap: 6px; }
+    .gtools .ctl { display: flex; flex: none; } .gtools .ctl:last-child { flex: 1; min-width: 60px; } .gtools .ctl .pl { display: none; } .gtools .trow { display: flex; flex-wrap: nowrap; gap: 6px; }
+    .gtools .btn { height: 26px; padding: 0 7px; font-size: 9px; letter-spacing: 0.1em; } .gtools .seg { height: 26px; } .gtools .seg .btn { height: 100%; padding: 0 7px; font-size: 9px; letter-spacing: 0.1em; } .gtools .ctl .seg, .gtools .ctl .trow { width: auto; max-width: none; } .gtools .tog { width: auto; flex: none; } .gtools .tog i { display: none; } .gtools .seg { display: inline-grid; grid-template-columns: none; }
+    .wrap.game .voice { right: 8px; bottom: 8px; padding: 5px 8px; } .wrap.game .front { left: 8px; bottom: 8px; } .bubble { max-width: 210px; padding: 7px 13px 8px 11px; font-size: 15px; }
+    .dock { display: flex; flex-direction: column; padding: 9px 10px 12px; } .dock-top { display: contents; } .dock .qfb { order: 1; flex: none; font-size: 13.5px; min-height: 58px; } .dock .qopts { order: 2; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 7px; }
+    .dock-act { order: 3; margin-top: 12px; } .dock-act .btn { flex: 1; } #gReplay, #qNext { min-width: 0; } .dock .qopt { min-height: 58px; padding: 7px 38px 9px 10px; } .dock .qopt .s { font-size: 30px; } .dock .qopt .w { font-size: 14px; }
+    .qopt.ok::after, .qopt.ans::after, .qopt.no::after { right: 9px; width: 20px; height: 20px; margin-top: -10px; background-size: 12px; }
+    .gmodes { grid-template-columns: 1fr; } .gcard { top: 54%; padding: 14px 16px 18px; } .gcard h2 { font-size: 23px; } .gact .btn.primary { flex-basis: 100%; } #qLevels { gap: 5px; } #qLevels .btn { flex: 1; padding: 0 6px; font-size: 9.5px; letter-spacing: 0.1em; }
+  }
+  @keyframes bin { 0% { opacity: 0; transform: scale(0.5); } 55% { opacity: 1; transform: scale(1.08); } 78% { transform: scale(0.98); } 100% { opacity: 1; transform: scale(1); } }
+  @keyframes bout { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.9); } }
+  @keyframes bspin { from { transform: scale(0.3) rotate(-90deg); } 60% { transform: scale(1.25) rotate(8deg); } to { transform: none; } }
+  @keyframes conf { to { transform: translateY(110vh) rotate(720deg); } }
+  @keyframes qpop { 0% { transform: scale(1); } 35% { transform: scale(1.07); } 100% { transform: scale(1); } }
+  @keyframes qshake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+  @keyframes qfloat { 0% { opacity: 0; transform: translateY(10px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }      /* 얻은 점수: 점수 바로 아래에서 떠오른다(옆 칸을 가리지 않는다) */
+  @keyframes qspark { 0% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.4) rotate(120deg); } }
+  @media (prefers-reduced-motion: reduce) { .gscrim, .gscrim.on { transition: none; } .bubble.on { animation: none; opacity: 1; } .bubble.off, .bubble .bi { animation: none !important; } .qopt.ok, .qopt.no, .qhud b.pop { animation: none; } .qspark, .conf { display: none; } }
+  .foot { font: italic 400 12.5px/1.45 'Lora'; color: var(--muted); margin-top: 14px; border-top: 1px solid var(--line); padding-top: 8px; }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; } .panel { border-left: 0; border-top: 1px solid var(--line); padding-top: 20px; } .modebar { width: auto; right: 12px; top: 10px; background: var(--paper); } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="stage" id="stage">
+    <canvas id="view"></canvas>
+    <div class="hint">ARTICULATION IN 3D<span>Drag to rotate · scroll to zoom</span></div>
+    <div class="front"><div class="cap">FRONT VIEW</div></div>
+    <div class="bubble" id="bubble" aria-live="polite"><svg class="tail ts" viewBox="0 0 40 20" preserveAspectRatio="none" aria-hidden="true"><path class="f" d="M40 3C27 4.5 11 9.5 1.2 17.2 12.5 17 27 16.4 40 15.5Z"/><path class="s" vector-effect="non-scaling-stroke" d="M38.2 3.3C26 5 11 9.8 1.2 17.2 12 17 25.6 16.5 38.2 15.6"/></svg><svg class="tail tu" viewBox="0 0 18 30" aria-hidden="true"><path class="f" d="M3 30C5.5 20 7 10 7 1.2 10.5 10 13.5 20 16 30Z"/><path class="s" d="M3.2 28.2C5.6 19.5 7 10 7 1.2 10.4 9.8 13.2 19.5 15.8 28.2"/></svg><i class="bi"></i><span id="bubbleT"></span></div>
+    <div class="voice">VOCAL CORDS<b id="voiceLab">VOICELESS</b></div>
+    <!-- Practice: 위쪽 점수 띠 -->
+    <div class="ghud" id="ghud" hidden>
+      <button class="btn chip" id="gSetup" title="Change the game or the level"><span id="gSetupT"></span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.2l4 4 4-4"/></svg></button>
+      <div class="gnum"><span>SCORE</span><b id="qPts">0</b><i class="qplus" id="qPlus"></i></div>
+      <div class="gnum streak"><span>STREAK</span><b id="qStreak">0</b><small id="qMult"></small></div>
+      <div class="gnum best"><span>BEST</span><b id="qBest">–</b></div>
+      <div class="gprog"><p class="qstat" id="qStat"></p><div class="qpips" id="qPips"></div></div>
+      <span class="gsp"></span>
+      <div class="gright"><button class="btn" id="gRank" title="Rank, looks and badges"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="6" r="3.6"/><path d="M5.8 8.9 4.6 14 8 12.1l3.4 1.9-1.2-5.1"/></svg><span id="gRankT"></span></button><button class="btn icon" id="qSfx" title="Sound effects: on" aria-label="Sound effects: on"><svg class="s-on" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z"/><path d="M10.4 6a3 3 0 0 1 0 4"/><path d="M12.2 4.3a5.4 5.4 0 0 1 0 7.4"/></svg><svg class="s-off" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z"/><path d="M10.8 6.2l3.2 3.6M14 6.2l-3.2 3.6"/></svg></button></div>
+      <div class="qtimer"><i id="qTime"></i></div>
+    </div>
+    <!-- Practice: 보기 도구(시점·X-ray·라벨·절단). Explore에서는 오른쪽 칸에 있는 같은 묶음을 옮겨 온다 -->
+    <div class="gtools" id="gtools" hidden></div>
+    <div class="gscrim" id="gScrim"></div>
+    <!-- Practice: 시작 카드 -->
+    <div class="gcard" id="gLobby" hidden>
+      <div class="k">PRACTICE</div>
+      <h2>Which sound is this?</h2>
+      <p>The model makes a sound without telling you which. Watch the lips, the tongue, the velum and the vocal cords, then pick it from four choices.</p>
+      <div class="gsec">GAME</div><div class="gmodes" id="qModes"></div>
+      <div class="gsec">LEVEL</div><div id="qLevels"></div>
+      <p class="qhelp" id="qHelp"></p>
+      <button class="btn big primary wide" id="gStart"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.4v9.2L12.4 8z"/></svg>Start <kbd>Enter</kbd></button>
+    </div>
+    <!-- Practice: 결과 카드 -->
+    <div class="gcard" id="gResult" hidden></div>
+    <!-- Practice: 보상 서랍 -->
+    <aside class="gdrawer" id="qRew" hidden>
+      <div class="ghead"><div class="k">REWARDS</div><button class="btn icon" id="gRewClose" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+      <h2 id="qRank"></h2>
+      <div class="qbar"><i id="qXp"></i></div><p class="qstat" id="qXpTxt"></p>
+      <div class="qsw"><span class="pl">HAIR</span><span class="qsw" style="margin:0" id="swHair"></span></div>
+      <div class="qsw"><span class="pl">HOODIE</span><span class="qsw" style="margin:0" id="swHood"></span></div>
+      <div class="qsw"><span class="pl">EXTRAS</span><span class="qsw" style="margin:0" id="swAcc"></span></div>
+      <div class="qbadges" id="qBadges"></div>
+      <button class="btn quiet" id="qReset">Reset progress</button>
+    </aside>
+  </div>
+  <aside class="panel" id="panel">
+    <div class="kick" id="kick">CONSONANTS · VOWELS</div>
+    <h1>The Vocal Tract</h1>
+    <div class="now">
+      <div class="sym" id="sym">ə</div>
+      <div><div class="desc" id="desc">mid central vowel</div><div class="word" id="word">about</div></div>
+      <div class="note" id="note"></div>
+    </div>
+    <div id="toolsHome"><div class="tools" id="tools">
+      <div class="trow" id="tplay"><button class="btn" id="replay"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.7-3.75"/><path d="M3 2.6v3.1h3.1"/></svg>Replay</button><button class="btn" id="say"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z"/><path d="M10.4 6a3 3 0 0 1 0 4"/><path d="M12.2 4.3a5.4 5.4 0 0 1 0 7.4"/></svg>Listen</button></div>
+      <div class="ctl"><span class="pl">View</span><div class="seg" role="group" aria-label="View"><button class="btn" data-view="side">Side</button><button class="btn" data-view="q">3/4</button><button class="btn" data-view="front">Front</button></div></div>
+      <div class="ctl"><span class="pl">Show</span><div class="trow"><button class="btn tog" id="tags" aria-pressed="false">Labels<i></i></button><button class="btn tog" id="xray" aria-pressed="false">X-ray<i></i></button></div></div>
+      <div class="ctl"><span class="pl">Cut the head</span><input type="range" id="cut" min="0" max="100" value="100" aria-label="Cut the head open" /></div>
+    </div></div>
+    <div id="exploreUI">
+    <div class="grp"><div class="lab">CONSONANTS · BY PLACE OF ARTICULATION</div><div id="cons"></div></div>
+    <div class="grp"><div class="lab">VOWELS</div><div id="vows"></div></div>
+    </div>
+    <p class="foot">A schematic model: shapes are idealized to show place, manner, voicing and lip rounding. Badge and result art: AI-generated.</p>
+  </aside>
+  <!-- Practice: 모형 바로 아래의 답 고르기 칸 -->
+  <div class="dock" id="dock" hidden>
+    <div class="dock-top"><div class="qfb" id="qFb"></div><div class="dock-act"><button class="btn big" id="gReplay"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.7-3.75"/><path d="M3 2.6v3.1h3.1"/></svg>Replay <kbd>R</kbd></button><button class="btn big primary" id="qNext">Skip <kbd>Enter</kbd></button></div></div>
+    <div class="qopts" id="qOpts"></div>
+  </div>
+  <div class="mode modebar seg" role="group" aria-label="Mode"><button class="btn on" data-mode="explore">Explore</button><button class="btn" data-mode="practice">Practice</button></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* ── 2D 시상 단면 윤곽(자체 도식 fig53/fig54와 같은 좌표계) ── */
+const SKIN_HEAD = 'M 92,6 C 78,30 74,52 76,74 C 72,96 58,130 42,148 C 36,155 38,164 48,166 C 57,167 63,170 66,177 ';
+const SKIN_TAIL = ' C 66,272 63,290 69,306 C 77,322 102,331 132,334 C 172,338 205,356 214,396 L 218,466 L 400,466 L 400,6 Z';
+const LIP = {
+  open:   'C 66,185 57,191 52,198 C 50,206 55,212 66,214 L 66,220 C 55,221 50,232 53,242 C 56,252 66,256 74,262',
+  spread: 'C 66,185 58,191 54,198 C 52,206 57,212 68,214 L 68,219 C 57,220 52,231 55,241 C 57,252 66,256 74,262',
+  round:  'C 65,186 52,190 45,198 C 40,206 44,212 56,214 L 57,220 C 44,222 41,232 47,242 C 53,252 66,256 74,262',
+  closed: 'C 66,185 57,191 52,198 C 50,206 54,213 62,217 L 62,218 C 54,221 50,232 53,242 C 56,252 66,256 74,262',
+  labdent:'C 66,185 57,189 53,195 C 51,201 59,204 71,204 L 95,213 C 90,216.5 68,222 66,234 C 65,247 68,256 74,262',
+};
+const skinPath = k => SKIN_HEAD + LIP[k] + SKIN_TAIL;
+const AIR_A = 'M 64,172 C 70,160 84,142 96,128 C 110,112 140,100 180,96 C 222,92 262,98 292,112 C 300,118 304,130 304,150 C 310,190 312,240 310,300 L 306,466 L 268,466 L 268,420 C 268,400 270,380 272,362 L 268,346 L 280,262 L 278,236 L 240,175 L 96,172 C 86,177 74,179 64,172 Z';
+const AIR_B = 'M 72,214 C 84,212 96,200 108,190 C 116,182 128,178 146,176 C 182,172 220,176 240,180 L 282,236 L 282,290 L 102,256 C 96,252 90,240 88,232 L 72,222 Z';
+const BONE  = 'M 92,172 C 140,170 200,170 240,169 L 240,180 C 220,176 182,172 146,176 C 128,178 116,182 108,190 C 102,188 96,184 92,180 Z';
+const TOOTH_U = 'M 86,189 L 100,190 C 101,198 99,208 96,216 C 92,219 87,217 85,213 C 84,205 84,197 86,189 Z';
+const TOOTH_L = 'M 88,224 C 92,221 97,221 100,224 L 102,246 L 88,246 C 87,238 87,230 88,224 Z';
+const VEL = {
+  up:   'M 240,169 C 258,164 282,152 302,146 L 306,160 C 306,170 302,180 296,181 C 290,181 288,174 287,167 C 280,178 260,189 240,180 Z',
+  down: 'M 240,169 C 262,170 284,186 292,210 L 294,226 C 294,234 290,239 286,238 C 280,238 278,230 278,222 C 272,204 258,186 240,180 Z',
+};
+const TAILT = ' C 246,327 214,318 186,303 ';      // 혀 밑면: 혀뿌리에서 앞으로 올라온다(혀를 얇게, 혀끝 밑에 공간이 생기게)
+const TNG = {
+  i:     'M 100,236 C 106,214 126,194 160,186 C 192,181 220,188 244,204 C 266,216 277,238 279,262 C 281,290.4 276,314.1 266,328' + TAILT + 'C 164,293 140,272 124,262 C 115,255 104,245 100,236 Z',
+  u:     'M 100,242 C 110,236 128,230 154,224 C 184,216 212,200 238,192 C 262,186 278,204 281,234 C 284,268.3 278,309.4 266,328' + TAILT + 'C 164,293 140,278 124,268 C 115,261 104,251 100,242 Z',
+  a:     'M 102,252 C 112,247 132,244 158,243 C 192,242 224,243 250,248 C 268,254 278,268 280,288 C 282,303.1 276,318.9 266,328' + TAILT + 'C 164,293 142,288 126,278 C 117,271 106,261 102,252 Z',
+  rest:  'M 100,240 C 108,226 128,214 154,210 C 186,205 222,208 246,218 C 266,228 277,246 279,268 C 281,292 276,315.7 266,328' + TAILT + 'C 164,293 140,276 124,266 C 115,259 104,249 100,240 Z',
+  alv:   'M 97,216 C 98,190 110,176 128,197 C 160,212 215,206 246,212 C 266,220 277,240 279,262 C 281,290.4 276,314.1 266,328' + TAILT + 'C 164,293 137,252 121,242 C 112,235 101,225 97,216 Z',
+  alvfr: 'M 98,221 C 99,198 110,180 128,201 C 160,212 215,206 246,212 C 266,220 277,240 279,262 C 281,290.4 276,314.1 266,328' + TAILT + 'C 164,293 138,257 122,247 C 113,240 102,230 98,221 Z',
+  dent:  'M 82,220 C 92,214 110,208 130,206 C 165,204 215,206 246,212 C 266,220 277,240 279,262 C 281,290.4 276,314.1 266,328' + TAILT + 'C 164,293 122,247 106,237 C 98,231 88,224 82,220 Z',
+  pal:   'M 100,230 C 104,206 124,178 150,174.3 C 184,173 220,190 244,206 C 266,216 277,238 279,262 C 281,290.4 276,314.1 266,328' + TAILT + 'C 164,293 140,266 124,256 C 115,249 104,239 100,230 Z',
+  palfr: 'M 100,232 C 104,210 124,186 150,180.5 C 186,180 220,192 244,206 C 266,216 277,238 279,262 C 281,290.4 276,314.1 266,328' + TAILT + 'C 164,293 140,268 124,258 C 115,251 104,241 100,232 Z',
+  retro: 'M 110,230 C 106,204 124,178 138,191 C 152,212 210,208 246,214 C 266,222 277,240 279,262 C 281,290.4 276,314.1 266,328' + TAILT + 'C 164,293 150,266 134,256 C 125,249 114,239 110,230 Z',
+  vel:   'M 100,246 C 112,240 135,236 160,228 C 195,216 222,186 250,181 C 272,182 281,210 282,238 C 284,271.5 278,309.4 266,328' + TAILT + 'C 164,293 140,282 124,272 C 115,265 104,255 100,246 Z',
+  veln:  'M 100,246 C 112,240 135,236 160,228 C 195,216 222,192 246,187 C 262,187 275,203 279,230 C 282,268 278,309.4 266,328' + TAILT + 'C 164,293 140,282 124,272 C 115,265 104,255 100,246 Z',
+  ae:    'M 99,250 C 108,238 128,228 152,226 C 184,224 220,236 246,250 C 262,260 272,274 274,292 C 276,306 273,320 266,328' + TAILT + 'C 164,293 139,286 123,276 C 114,269 103,259 99,250 Z',
+};
+
+/* ── 경로 ↔ 숫자 배열(같은 구조의 경로끼리 보간) ── */
+const toks = d => d.match(/[A-Za-z]|-?\d+(?:\.\d+)?/g);
+const nums = d => toks(d).filter(t => !/[A-Za-z]/.test(t)).map(Number);
+const cmds = d => toks(d).map(t => /[A-Za-z]/.test(t) ? t : null);
+/* 세로 압축: 입 아래 턱 구간(y 248–359)만 SQ배로 줄인다. 조음이 일어나는 위쪽은 그대로. ?sq=1이면 원래 비례 */
+const SQ = Math.min(1, Math.max(0.4, parseFloat(new URLSearchParams(location.search).get('sq')) || 0.58));
+const WY0 = -130, WYT = (() => { const S = t => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); }, T = [WY0]; for (let y = WY0; y < 600; y++) { const m = y + 0.5; T.push(T[T.length - 1] + 1 - (1 - SQ) * S((m - 248) / 24) * (1 - S((m - 335) / 24))); } return T; })();
+const wy = y => { const f = Math.min(WYT.length - 2, Math.max(0, y - WY0)), i = Math.floor(f); return WYT[i] + (WYT[i + 1] - WYT[i]) * (f - i); };
+const X = v => v - 175, Y = v => 250 - wy(v);
+function shapeFrom(template, n) {
+  const s = new THREE.Shape(); let i = 0, k = 0;
+  while (k < template.length) {
+    const c = template[k];
+    if (c === 'M') { s.moveTo(X(n[i]), Y(n[i + 1])); i += 2; k += 3; }
+    else if (c === 'L') { s.lineTo(X(n[i]), Y(n[i + 1])); i += 2; k += 3; }
+    else if (c === 'C') { s.bezierCurveTo(X(n[i]), Y(n[i + 1]), X(n[i + 2]), Y(n[i + 3]), X(n[i + 4]), Y(n[i + 5])); i += 6; k += 7; }
+    else if (c === 'Z') { s.closePath(); k += 1; }
+    else k += 1;
+  }
+  return s;
+}
+const mix = (keys, table) => {
+  let out = null, sum = 0;
+  for (const [k, w] of Object.entries(keys)) { const a = nums(table[k]); sum += w; out = out ? out.map((v, j) => v + a[j] * w) : a.map(v => v * w); }
+  return out.map(v => v / sum);
+};
+const SKINS = Object.fromEntries(Object.keys(LIP).map(k => [k, skinPath(k)]));
+
+
+/* ── 턱: 귀 앞 축을 중심으로 아래턱 쪽 점들을 회전 ── */
+const PIVOT = [305, 165], JAW_MAX = THREE.MathUtils.degToRad(4.6);
+function rotPt(x, y, j, w) { const th = -j * JAW_MAX * w, dx = x - PIVOT[0], dy = y - PIVOT[1], c = Math.cos(th), sn = Math.sin(th); return [PIVOT[0] + dx * c - dy * sn, PIVOT[1] + dx * sn + dy * c]; }
+function rot(n, j, weightAt) { const out = n.slice(); for (let i = 0; i < n.length; i += 2) { const w = weightAt(i); if (!w) continue; const p = rotPt(n[i], n[i + 1], j, w); out[i] = p[0]; out[i + 1] = p[1]; } return out; }
+const wSkin = i => (i >= 38 && i <= 63) ? 1 : i === 64 ? 0.7 : i === 66 ? 0.35 : i === 68 ? 0.1 : 0;
+const wAirB = i => i >= 24 ? 1 : i === 22 ? 0.3 : 0;
+const AIRB_N = nums(AIR_B);
+const W = (x, y, z = 0) => new THREE.Vector3(x - 175, 250 - wy(y), z);
+const lerp = (a, b, t) => a + (b - a) * t;
+function pw(points, v) {     // 조절점을 지나는 매끄러운 보간(에르미트, 접선은 양옆 기울기의 평균): 꺾인 자국이 생기지 않게
+  const n = points.length; if (v <= points[0][0]) return points[0][1]; if (v >= points[n - 1][0]) return points[n - 1][1];
+  let i = 1; while (v > points[i][0]) i++;
+  const [x0, y0] = points[i - 1], [x1, y1] = points[i], h = x1 - x0, t = (v - x0) / h;
+  const sl = k => (points[k + 1][1] - points[k][1]) / (points[k + 1][0] - points[k][0]);
+  const m0 = i - 1 === 0 ? sl(0) : (sl(i - 2) + sl(i - 1)) / 2, m1 = i === n - 1 ? sl(n - 2) : (sl(i - 1) + sl(i)) / 2;
+  const t2 = t * t, t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * h * m0 + (-2 * t3 + 3 * t2) * y1 + (t3 - t2) * h * m1;
+}
+
+/* ── 장면 ── */
+const stage = document.getElementById('stage'), canvas = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05; renderer.localClippingEnabled = true; renderer.autoClear = false;
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(renderer), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(30, 1, 10, 6000);
+const TARGET = W(235, 205, 0);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.enablePan = false; controls.target.copy(TARGET); controls.minDistance = 420; controls.maxDistance = 2600;
+controls.minPolarAngle = 0.65; controls.maxPolarAngle = 2.2;
+const frontCam = new THREE.PerspectiveCamera(20, 210 / 232, 10, 6000);
+frontCam.position.copy(W(-1330, 205, 0)); frontCam.lookAt(W(80, 205, 0));
+
+scene.add(new THREE.HemisphereLight(0xfff8f0, 0xd9c4b0, 0.55));
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.0); sun.position.set(-560, 420, 290); sun.castShadow = true;      // 키 라이트(따뜻한 색, 그림자)
+sun.shadow.mapSize.set(1024, 1024); Object.assign(sun.shadow.camera, { left: -360, right: 360, top: 400, bottom: -360, near: 10, far: 2000 });
+sun.shadow.bias = -0.002; sun.shadow.normalBias = 5; sun.shadow.radius = 4; scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdce8f2, 0.4); fill.position.set(-300, 40, -420); scene.add(fill);                 // 필 라이트(차가운 색)
+const rim = new THREE.DirectionalLight(0xfff3e2, 1.1); rim.position.set(460, 420, 160); scene.add(rim);                      // 림 라이트(뒤 위에서 윤곽을 살린다)
+const SUN_DIR = sun.position.clone().normalize();
+
+const cutPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.01);   // z ≤ c 쪽만 남긴다
+const CP = [cutPlane];
+const M = (color, o = {}) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.7, metalness: 0, envMapIntensity: 0.55, clippingPlanes: CP, clipShadows: true, ...o });
+const B = color => new THREE.MeshBasicMaterial({ color, side: THREE.BackSide, clippingPlanes: CP });   // 잘린 면(속이 찬 것처럼 보이게)
+const mat = {
+  skin:   M(0xffffff, { roughness: 0.62, sheen: 0.5, sheenColor: new THREE.Color(0xffd9c8), sheenRoughness: 0.5, vertexColors: true, envMapIntensity: 0.25, transparent: true }),
+  skinX:  M(0xffffff, { roughness: 0.8, vertexColors: true, envMapIntensity: 0.22, transparent: true, opacity: 0.2, depthWrite: false }),
+  ear:    M(0xffffff, { roughness: 0.72, sheen: 0.45, sheenColor: new THREE.Color(0xffd9c8), sheenRoughness: 0.5, vertexColors: true, envMapIntensity: 0.25 }),
+  hair:   M(0xffffff, { roughness: 0.42, anisotropy: 0.8, sheen: 0.35, sheenColor: new THREE.Color(0xd9a878), sheenRoughness: 0.4, vertexColors: true, envMapIntensity: 0.45, transparent: true }), hairCut: B(0x5a3b27),
+  hairX:  M(0xffffff, { roughness: 0.5, vertexColors: true, envMapIntensity: 0.35, transparent: true, opacity: 0.2, depthWrite: false }),
+  hood:   M(0x9dbde6, { roughness: 0.85, sheen: 0.5, sheenColor: new THREE.Color(0xdbe8fa), envMapIntensity: 0.2 }), hoodCut: B(0x86a6d0),
+  lash:   M(0x35241d, { roughness: 0.6, envMapIntensity: 0.1, side: THREE.DoubleSide }),
+  skinCut: B(0xe6bfa9),
+  bone:   M(0xf2ebdc, { roughness: 0.5, clearcoat: 0.15 }), boneCut: B(0xe4dccb),
+  tooth:  M(0xffffff, { roughness: 0.16, clearcoat: 0.9, clearcoatRoughness: 0.15 }), toothCut: B(0xeeeae0),
+  velum:  M(0xdc9f98, { roughness: 0.46, clearcoat: 0.35, clearcoatRoughness: 0.4 }), velumCut: B(0xc98780),
+  gum:    M(0xd98c88, { roughness: 0.42, clearcoat: 0.4, clearcoatRoughness: 0.4 }), gumCut: B(0xc47a77),
+  tongue: M(0xc65f5c, { roughness: 0.36, clearcoat: 0.55, clearcoatRoughness: 0.3 }), tongueCut: B(0xb04f4d),
+  dark:   new THREE.MeshBasicMaterial({ color: 0x3f2c2a, side: THREE.BackSide, clippingPlanes: CP }),
+  paint:  new THREE.MeshBasicMaterial({ color: 0x4a3431, depthWrite: false }),
+  fold:   new THREE.MeshPhysicalMaterial({ color: 0x24513f, roughness: 0.5 }),
+  air:    new THREE.MeshStandardMaterial({ color: 0x2f7fa3, emissive: 0x2f7fa3, emissiveIntensity: 0.6, roughness: 0.4 }),
+};
+/* 입술·입 구멍·머리카락 경계는 조각 셰이더에서 식으로 계산한다(꼭짓점 색·discard만 쓰면 가장자리가 계단진다).
+   피부·머리카락은 transparent로 두고 경계에서만 알파를 낮춰 뒤(입 안·이마)와 부드럽게 섞는다. */
+const LIPU = { uSun: { value: SUN_DIR }, uHL: { value: new Float32Array(64) }, uLipA: { value: new THREE.Vector4() }, uLipB: { value: new THREE.Vector4() }, uLipC: { value: new THREE.Color(0xdf8a86) }, uLipD: { value: new THREE.Color(0xb96462) } };
+const LIP_GLSL = `
+  float lipM = 0.0, cov = 1.0; vec3 lipCol = vec3(0.0);
+  if (vF.z < 60.0) {
+    float yv = vF.x, az = abs(vF.y), ym = uLipA.x, gap = uLipA.y, mw = uLipA.z, u = az / (mw + 9.0);
+    if (u < 1.0) {
+      float e = 1.0 - u * u, tg = sqrt(e);
+      float top = ym - gap * tg - uLipB.x * pow(e, 0.8) * (1.0 - 0.2 * exp(-u * u / 0.03));      // 윗입술: 가운데가 살짝 패인 활 모양
+      float bot = ym + gap * tg + uLipB.y * pow(e, 0.6);                                          // 아랫입술: 도톰하게
+      lipM = smoothstep(-0.6, 1.8, min(yv - top, bot - yv)) * smoothstep(0.0, 0.1, e);
+      float sd = clamp((abs(yv - ym) - gap * tg) / 9.0, 0.0, 1.0);
+      lipCol = mix(uLipD, uLipC, smoothstep(0.0, 0.75, sd));                                      // 입술 사이로 갈수록 짙게
+      lipCol = mix(lipCol, uLipD * 0.7, 0.8 * exp(-pow((yv - ym) / 0.8, 2.0)) * (1.0 - smoothstep(1.0, 1.8, gap)));   // 다문 입술 선
+    }
+    if (gap > 1.3) { float f = 1.0 - pow(az / mw, 2.0) - pow((yv - ym) / (gap + 0.4), 2.0), fw = max(fwidth(f), 1e-4); cov = 1.0 - smoothstep(-fw, fw, f); }
+  }`;
+const SKIN_GLSL = `
+  { vec2 ev = vec2((abs(vF.y) - 64.0) / 26.3, (128.0 - vF.x) / 32.9); float ed = length(ev), up = smoothstep(-0.2, 0.6, ev.y / max(ed, 1e-3));
+    float shade = (1.0 - smoothstep(1.0, 1.4, ed)) * mix(0.06, 0.2, up) + 0.13 * up * exp(-pow((ed - 1.22) / 0.045, 2.0));      // 눈두덩 음영 + 쌍꺼풀 선
+    if (vF.z < 60.0) diffuseColor.rgb *= mix(vec3(1.0), vec3(0.78, 0.6, 0.56), shade); }
+  if (vF.z < 60.0) {
+    float bz = abs(vF.y), bu = (bz - 38.0) / 54.0, bc = 75.5 + 0.0055 * (bz - 60.0) * (bz - 60.0);      // 눈썹: bu 0 = 미간 쪽, 1 = 꼬리. 가운데가 높은 아치
+    float hw = mix(3.5, 0.9, smoothstep(0.25, 1.0, bu)) * smoothstep(-0.03, 0.14, bu) * (1.0 - smoothstep(0.9, 1.02, bu));
+    float bm = (1.0 - smoothstep(hw - 0.9, hw + 0.7, abs(vF.x - bc))) * step(0.02, hw) * (0.8 + 0.2 * sin(bz * 2.4 + (vF.x - bc) * 1.6));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.135, 0.058, 0.03), 0.9 * bm);
+    float ns = exp(-pow((vF.x - 169.5) / 3.0, 2.0) - pow((abs(vF.y) - 8.0) / 4.2, 2.0));      // 콧구멍 자리의 옅은 음영
+    diffuseColor.rgb *= mix(vec3(1.0), vec3(0.6, 0.4, 0.36), 0.5 * ns);
+  }`;
+const SSS_GLSL = `
+  { vec3 wN = inverseTransformDirection(normal, viewMatrix); float ndl = dot(wN, uSun);      // 빛과 그늘의 경계에 붉은 기(피부 속으로 스며든 빛 흉내)
+    totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.34, 0.2) * 0.12 * smoothstep(-0.5, 0.05, ndl) * (1.0 - smoothstep(0.05, 0.6, ndl)); }`;
+const STRAND_GLSL = `
+  float th = vF.x * (vF.z < 0.0 ? -1.0 : 1.0), wvy = sin(vF.y * 0.045 + th * 3.0), fine = 1.0 - smoothstep(0.012, 0.03, fwidth(vF.x));
+  float p1 = 31.0 * th + wvy * 1.2, p2 = 67.0 * th + 1.7 + wvy * 2.0, p3 = 127.0 * th + 4.1 + wvy;
+  float strand = 0.5 + 0.5 * (0.42 * sin(p1) + 0.34 * sin(p2) + 0.24 * fine * sin(p3));      // 가닥 무늬: 정수 진동수라 뒤통수 이음매에서도 이어진다
+  float hairDn = 0.3 * cos(p1) + 0.5 * cos(p2) + 0.6 * fine * cos(p3);
+  diffuseColor.rgb *= mix(0.7, 1.22, strand);`;
+const HAIR_GLSL = `
+  float fa = clamp(vF.x / 3.14159265, 0.0, 1.0) * 63.0; int i0 = int(floor(fa)), i1 = min(i0 + 1, 63);
+  float yH = mix(uHL[i0], uHL[i1], fract(fa));
+  if (vF.x < 1.0) yH += (6.0 * sin(vF.z * 0.1 + 0.7) + 0.11 * vF.z) * (1.0 - vF.x);      // 앞머리: 살짝 옆으로 넘긴 물결
+  { float thh = vF.x * (vF.z < 0.0 ? -1.0 : 1.0); yH += 1.7 * sin(43.0 * thh + 0.8) + 1.1 * sin(97.0 * thh + 2.1); }      // 끝이 가닥가닥 들쭉날쭉하게
+  float hv = 0.5 - (yH - vF.y - 1.5) / 14.0, fwH = max(fwidth(hv), 1e-4), cov = 1.0 - smoothstep(0.5 - fwH, 0.5 + fwH, hv);`;
+function hook(m, kind) {      // kind: skin(입술 색 + 부드러운 구멍) · skinCut(구멍만) · hair · hairCut
+  const isHair = kind.startsWith('hair'), soft = !kind.endsWith('Cut');
+  m.customProgramCacheKey = () => 'v3d-' + kind;
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, LIPU);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ysvg; ' + (isHair ? 'attribute float ha; attribute float hz; ' : '') + 'varying vec4 vF;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvF = ' + (isHair ? 'vec4(ha, ysvg, hz, 0.0);' : 'vec4(ysvg, position.z, position.x, 0.0);'));
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec4 vF; uniform vec3 uSun; uniform float uHL[64]; uniform vec4 uLipA; uniform vec4 uLipB; uniform vec3 uLipC; uniform vec3 uLipD;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\n' + (isHair ? HAIR_GLSL + (kind === 'hair' ? STRAND_GLSL : '') : LIP_GLSL + (kind === 'skin' ? SKIN_GLSL + '\n  diffuseColor.rgb = mix(diffuseColor.rgb, lipCol, lipM);' : ''))
+        + (soft ? '\n  diffuseColor.a *= cov; if (diffuseColor.a < 0.02) discard;' : '\n  if (cov < 0.5) discard;'))
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n' + (kind === 'skin' ? '  roughnessFactor = mix(roughnessFactor, 0.4, lipM);' : ''))
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n' + (kind === 'hair' ? '#ifdef USE_TANGENT\n  normal = normalize(normal + normalize(vTangent) * hairDn * 0.22);\n#endif' : ''))
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + (kind === 'skin' ? SSS_GLSL : ''));
+  };
+}
+const hairDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+hairDepth.onBeforeCompile = sh => { Object.assign(sh.uniforms, LIPU);
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ysvg; attribute float ha; attribute float hz; varying vec4 vF;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvF = vec4(ha, ysvg, hz, 0.0);');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec4 vF; uniform float uHL[64];').replace('#include <map_fragment>', '#include <map_fragment>\n' + HAIR_GLSL + '\n  if (cov < 0.5) discard;'); };
+const EYE_GLSL = `
+  vec2 q = vE - vec2(-uEye * 0.5, 1.5);
+  float ri = length(q / vec2(12.0, 15.4)), rp = length(q / vec2(6.6, 8.8)), fi = max(fwidth(ri), 1e-4), fp = max(fwidth(rp), 1e-4);
+  float inIris = 1.0 - smoothstep(1.0 - fi, 1.0 + fi, ri), inPupil = 1.0 - smoothstep(1.0 - fp, 1.0 + fp, rp);
+  vec3 ic = mix(vec3(0.46, 0.25, 0.10), vec3(0.20, 0.085, 0.032), smoothstep(-0.75, 0.35, q.y / 15.4));      // 아래는 밝게, 위는 짙게
+  { float ang = atan(q.y / 15.4, q.x / 12.0); ic *= 0.9 + 0.13 * sin(ang * 44.0 + 2.5 * sin(ang * 6.0)) * smoothstep(0.42, 0.62, ri) * (1.0 - smoothstep(0.85, 1.0, ri)); }      // 홍채 결(방사 무늬)
+  ic = mix(ic, vec3(0.075, 0.032, 0.014), smoothstep(0.74, 1.0, ri));                                       // 홍채 테두리
+  ic = mix(ic, vec3(0.012, 0.007, 0.006), inPupil);
+  vec3 sc = vec3(1.0) * mix(1.0, 0.74, smoothstep(0.25, 1.0, vE.y / 17.8));                                  // 흰자: 윗눈꺼풀 그늘
+  float g1 = length(q - vec2(4.3, 5.4)) / (3.5 * (1.0 + 0.4 * uJoy)), g2 = length(q - vec2(-3.9, -5.6)) / (1.7 * (1.0 + 0.9 * uJoy)), g3 = length(q - vec2(-6.6, 4.4)) / max(1.5 * uJoy, 0.001);      // 기쁠 때(uJoy)는 눈의 반짝임이 커지고 하나 더 생긴다
+  float glint = max(1.0 - smoothstep(1.0 - fwidth(g1), 1.0 + fwidth(g1), g1), 1.0 - smoothstep(1.0 - fwidth(g2), 1.0 + fwidth(g2), g2));
+  glint = max(glint, (1.0 - smoothstep(1.0 - fwidth(g3), 1.0 + fwidth(g3), g3)) * step(0.08, uJoy));
+  diffuseColor.rgb = mix(mix(sc, ic, inIris), vec3(1.0), glint);`;
+const JOY = { value: 0 };
+const eyeMat = sgn => { const m = M(0xffffff, { roughness: 0.42, clearcoat: 0.25, clearcoatRoughness: 0.35, envMapIntensity: 0.3 }); m.customProgramCacheKey = () => 'v3d-eye';
+  m.onBeforeCompile = sh => { sh.uniforms.uEye = { value: sgn }; sh.uniforms.uJoy = JOY;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vE;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvE = position.xy;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vE; uniform float uEye; uniform float uJoy;').replace('#include <color_fragment>', '#include <color_fragment>\n' + EYE_GLSL)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vec3(0.85) * glint;'); };
+  return m; };
+hook(mat.skin, 'skin'); hook(mat.skinX, 'skin'); hook(mat.skinCut, 'skinCut'); hook(mat.hair, 'hair'); hook(mat.hairX, 'hair'); hook(mat.hairCut, 'hairCut');
+const head = new THREE.Group(); scene.add(head);
+
+/* ── 머리 표면: 높이별 가로 단면(초타원)에 코·입술·턱 돌출을 얹는다. 정중선(z = 0)은 2D 시상 윤곽과 일치 ── */
+const ROWS = []; for (let y = -95; y < 18; y += 7) ROWS.push(y); for (let y = 18; y < 60; y += 3) ROWS.push(y); for (let y = 60; y < 340; y += 1.7) ROWS.push(y); for (let y = 340; y < 466; y += 7) ROWS.push(y); ROWS.push(466);
+const NC = 156, NR = ROWS.length;
+const COL = []; for (let i = 0; i < NC; i++) { const s = -1 + 2 * i / NC, phi = Math.PI * Math.sign(s) * Math.pow(Math.abs(s), 1.7), ux = Math.cos(phi), uz = Math.sin(phi), n = 2.5, sc = Math.pow(Math.pow(Math.abs(ux), n) + Math.pow(Math.abs(uz), n), -1 / n); COL.push([ux * sc, uz * sc]); }
+const SKIN_TPL = cmds(SKINS.open);
+function outline(n) {       // 얼굴 쪽 윤곽을 꺾은선으로(SVG 좌표). 목 앞(218,466)까지
+  const pts = []; let i = 0, k = 0, px = 0, py = 0;
+  while (k < SKIN_TPL.length && i <= 70) {
+    const c = SKIN_TPL[k];
+    if (c === 'M' || c === 'L') { px = n[i]; py = n[i + 1]; pts.push([px, py]); i += 2; k += 3; }
+    else if (c === 'C') { const [x1, y1, x2, y2, x3, y3] = n.slice(i, i + 6); for (let s = 1; s <= 14; s++) { const t = s / 14, a = 1 - t; pts.push([a * a * a * px + 3 * a * a * t * x1 + 3 * a * t * t * x2 + t * t * t * x3, a * a * a * py + 3 * a * a * t * y1 + 3 * a * t * t * y2 + t * t * t * y3]); } px = x3; py = y3; i += 6; k += 7; }
+    else k += 1;
+  }
+  return pts;
+}
+const PLANE0 = [[6, 92], [40, 80], [74, 78], [100, 84], [128, 86], [150, 84], [170, 80], [200, 76], [218, 76], [242, 80], [262, 84], [290, 92], [306, 96], [322, 100], [334, 134], [396, 214], [466, 218]];
+const WIDTH = [[70, 158], [130, 157], [180, 155], [230, 148], [265, 133], [295, 109], [318, 86], [336, 72], [360, 66], [396, 64], [466, 70]];
+const cranF = y => 290 - 233.5 * Math.sqrt(Math.max(0, 1 - ((y - 120) / 215) ** 2));
+const BACK_R = 158, backOf = (y, R) => Math.max(290 + R * Math.sqrt(Math.max(0, 1 - ((y - 120) / 215) ** 2)), y > 250 ? 398 : 0), backX = y => backOf(y, BACK_R);
+const halfW = y => y <= 70 ? 158 * Math.sqrt(Math.max(0, 1 - ((y - 70) / 165) ** 2)) : pw(WIDTH, y);
+const SKINC = new THREE.Color(0xf2d0ba), NOSEC = new THREE.Color(0xf0b0a0), BLUSHC = new THREE.Color(0xf29c98);
+const hg = new THREE.BufferGeometry();
+const hPos = new Float32Array(NR * NC * 3), hCol = new Float32Array(NR * NC * 3), hY = new Float32Array(NR * NC);
+{ const idx = []; for (let j = 0; j < NR - 1; j++) for (let i = 0; i < NC; i++) { const a = j * NC + i, b = j * NC + (i + 1) % NC, c = (j + 1) * NC + i, d = (j + 1) * NC + (i + 1) % NC; idx.push(a, c, b, b, c, d); } hg.setIndex(idx); }
+hg.setAttribute('position', new THREE.BufferAttribute(hPos, 3)); hg.setAttribute('color', new THREE.BufferAttribute(hCol, 3)); for (let r = 0; r < NR; r++) hY.fill(ROWS[r], r * NC, (r + 1) * NC); hg.setAttribute('ysvg', new THREE.BufferAttribute(hY, 1));
+const hNrm = new Float32Array(NR * NC * 3); hg.setAttribute('normal', new THREE.BufferAttribute(hNrm, 3));
+/* 격자 구조를 이용한 법선 계산: 이웃 꼭짓점 차이의 외적(computeVertexNormals보다 훨씬 빠르다) */
+function gridNormals(Pz, N) {
+  for (let r = 0; r < NR; r++) { const r0 = Math.max(0, r - 1) * NC, r1 = Math.min(NR - 1, r + 1) * NC;
+    for (let i = 0; i < NC; i++) { const a = (r * NC + (i + NC - 1) % NC) * 3, b = (r * NC + (i + 1) % NC) * 3, c = (r0 + i) * 3, d = (r1 + i) * 3, o = (r * NC + i) * 3;
+      const ux = Pz[b] - Pz[a], uy = Pz[b + 1] - Pz[a + 1], uz = Pz[b + 2] - Pz[a + 2], vx = Pz[d] - Pz[c], vy = Pz[d + 1] - Pz[c + 1], vz = Pz[d + 2] - Pz[c + 2];
+      const nx = vy * uz - vz * uy, ny = vz * ux - vx * uz, nz = vx * uy - vy * ux, l = Math.sqrt(nx * nx + ny * ny + nz * nz);
+      if (l > 1e-6) { N[o] = nx / l; N[o + 1] = ny / l; N[o + 2] = nz / l; } else { N[o] = 0; N[o + 1] = 1; N[o + 2] = 0; } } }
+}
+/* 틈새 음영: 이웃 꼭짓점들이 법선 쪽으로 솟아 있으면 오목한 곳(콧방울 옆, 입술 사이, 턱 밑)이므로 어둡고 붉게 칠한다 */
+function cavity() {
+  for (let r = 2; r < NR - 2; r++) for (let i = 0; i < NC; i++) {
+    if (COL[i][0] < -0.25) continue;      // 뒤통수는 머리카락에 가려지므로 건너뛴다
+    const o = (r * NC + i) * 3, px = hPos[o], py = hPos[o + 1], pz = hPos[o + 2], nx = hNrm[o], ny = hNrm[o + 1], nz = hNrm[o + 2]; let ao = 0;
+    for (let q = 0; q < 2; q++) {
+      const d = q ? 6 : 2, dr = Math.min(d, r, NR - 1 - r), a = (r * NC + (i + NC - d) % NC) * 3, b = (r * NC + (i + d) % NC) * 3, c = ((r - dr) * NC + i) * 3, e = ((r + dr) * NC + i) * 3;
+      const mx = (hPos[a] + hPos[b] + hPos[c] + hPos[e]) / 4 - px, my = (hPos[a + 1] + hPos[b + 1] + hPos[c + 1] + hPos[e + 1]) / 4 - py, mz = (hPos[a + 2] + hPos[b + 2] + hPos[c + 2] + hPos[e + 2]) / 4 - pz;
+      const ax = hPos[a] - px, ay = hPos[a + 1] - py, az = hPos[a + 2] - pz, ex = hPos[e] - px, ey = hPos[e + 1] - py, ez = hPos[e + 2] - pz, L = (Math.sqrt(ax * ax + ay * ay + az * az) + Math.sqrt(ex * ex + ey * ey + ez * ez)) / 2 || 1;
+      ao += Math.max(0, (mx * nx + my * ny + mz * nz) / L - 0.012) * (q ? 2.6 : 2.0);
+    }
+    ao = Math.min(0.5, ao); hCol[o] *= 1 - 0.15 * ao; hCol[o + 1] *= 1 - 0.27 * ao; hCol[o + 2] *= 1 - 0.3 * ao;
+  }
+}
+const skinMesh = new THREE.Mesh(hg, mat.skin), skinBack = new THREE.Mesh(hg, mat.skinCut); skinMesh.castShadow = skinMesh.receiveShadow = true;
+skinMesh.renderOrder = 3; skinBack.renderOrder = 0; head.add(skinBack, skinMesh);
+const RXF = new Float32Array(NR), RPL = new Float32Array(NR), RXW = new Float32Array(NR), RNAR = new Float32Array(NR), RNS = new Float32Array(NR);
+function buildHead(n, j, mw) {
+  const pts = outline(n), plane = PLANE0.map(([y, x]) => { if (y < 222 || y > 334) return [y, x]; const p = rotPt(x, y, j, 1); return [p[1], p[0]]; });
+  const p1y = n[31], Uy = n[37], Lwy = n[39], p4y = n[45], ym = (Uy + Lwy) / 2, gap = (Lwy - Uy) / 2;
+  LIPU.uLipA.value.set(ym, gap, mw, 0); LIPU.uLipB.value.set((Uy - p1y) * 0.95, (p4y - Lwy) * 0.9, 0, 0);
+  const prof = y => { if (y < 6) return cranF(y); let xf = 1e9; for (let q = 1; q < pts.length; q++) { const [xa, ya] = pts[q - 1], [xb, yb] = pts[q]; if ((ya - y) * (yb - y) <= 0 && ya !== yb) { const x = xa + (xb - xa) * (y - ya) / (yb - ya); if (x < xf) xf = x; } } return xf > 1e8 ? pw(plane, y) : xf; };
+  /* 얼굴 굴곡 = 넓은 바탕 곡선 xW(콧등–코밑–턱 끝–턱 밑을 지나는 매끈한 곡선, 얼굴 폭 전체) + 좁은 돌출(코·입술: 윤곽과 xW의 차이) */
+  let yS = 150, xS = -1e9; for (let y = 150; y <= p1y; y += 1) { const x = prof(y); if (x > xS) { xS = x; yS = y; } }      // 코밑점: 코끝과 윗입술 사이에서 가장 들어간 곳
+  const yB = p4y + 42, sigN = mw * 1.15 + 6, KW = [[yS - 110, pw(plane, yS - 110)], [yS - 70, pw(plane, yS - 70)], [yS, xS], [yB, prof(yB)]];
+  for (let y = yB + 14; y < 346; y += 14) KW.push([y, prof(y)]); KW.push([346, prof(346)]);
+  const SIGU = [[60, 70], [80, 24], [100, 13], [136, 13], [160, 17], [yS, 22]], SIGL = [[yB, 82], [yB + 40, 92], [yB + 70, 96]];
+  /* 줄마다의 윤곽값을 먼저 구하고, 아랫입술 밑에서는 좁은 돌출(nar)을 세로로 다듬은 값(RNS)도 만든다:
+     단면 윤곽의 턱 홈은 뾰족하게 꺾여 있어서 그대로 옆으로 퍼뜨리면 얼굴을 가로지르는 선이 된다. 정중선 부근만 원래 윤곽을 따르고 옆은 다듬은 값을 쓴다 */
+  for (let r = 0; r < NR; r++) { const y = ROWS[r], xf = prof(y), pl = y < 6 ? xf : pw(plane, y), xW = y <= yS - 110 ? pl : y >= 346 ? xf : pw(KW, y), nr = xW - xf; RXF[r] = xf; RPL[r] = pl; RXW[r] = xW; RNAR[r] = y > p4y ? nr * (0.75 + 0.25 * Math.tanh(nr / 3)) : nr; }
+  for (let r = 0; r < NR; r++) { const y = ROWS[r]; if (y <= p4y || y > 352) { RNS[r] = RNAR[r]; continue; } let v = 0, w = 0; for (let q = Math.max(0, r - 9); q <= Math.min(NR - 1, r + 9); q++) { const g = Math.exp(-(((ROWS[q] - y) / 7) ** 2)); v += g * RNAR[q]; w += g; } RNS[r] = v / w; }
+  for (let r = 0; r < NR; r++) {
+    const y = ROWS[r], xf = RXF[r];
+    const pl = RPL[r], xb = backX(y), bw = halfW(y), cx = (pl + backOf(y, 215)) / 2, af = cx - pl, ab = xb - cx, zone = y > yS && y < yB;
+    const xW = RXW[r], wide = pl - xW, nar = RNAR[r], sBl = y > p4y ? S01((y - p4y) / 18) : 0, narS = nar + (RNS[r] - nar) * sBl, sW = pw(SIGL, y), sN = y <= yS ? pw(SIGU, y) : sigN;
+    for (let i = 0; i < NC; i++) {
+      const [px, pz] = COL[i], o = (r * NC + i) * 3; let x = cx - px * (px > 0 ? af : ab); const z = pz * bw, az = Math.abs(z);
+      if (px > 0) {
+        const fr = Math.min(1, px * 1.6);
+        const kz = zone ? Math.min(1, Math.max(0, (az / mw - 0.8) / 0.6)) : 0;
+        const wLip = sBl < 1 ? Math.exp(-((z / sN) ** 2)) * (1 - kz * kz * (3 - 2 * kz)) : 0, wWide = sBl > 0 ? Math.exp(-((z / 24) ** 2)) : 0;      // 입술: 입 폭 안쪽만 · 턱: 넓고 완만하게
+        x -= (wide * Math.exp(-((z / sW) ** 2)) + (narS + (nar - narS) * Math.exp(-((z / 13) ** 2))) * (wLip + (wWide - wLip) * sBl)) * fr;
+        x += 4 * Math.exp(-(((y - 128) / 38) ** 2) - ((az - 64) / 36) ** 2) * fr;       // 눈자리
+        x -= 1.2 * Math.exp(-(((y - 80) / 10) ** 2) - ((az - 58) / 34) ** 2) * fr;      // 눈썹뼈
+        x -= 7 * Math.exp(-(((y - 172) / 36) ** 2) - ((az - 82) / 40) ** 2) * fr;       // 볼
+      }
+      hPos[o] = x - 175; hPos[o + 1] = 250 - wy(y); hPos[o + 2] = z;
+      let cr = SKINC.r, cg = SKINC.g, cb = SKINC.b;
+      if (px > 0.2 && y > 130 && y < 222) { const bl = 0.5 * Math.exp(-(((y - 184) / 14) ** 2) - ((az - 100) / 24) ** 2); cr = lerp(cr, BLUSHC.r, bl); cg = lerp(cg, BLUSHC.g, bl); cb = lerp(cb, BLUSHC.b, bl); }
+      if (px > 0.5 && y > 120 && y < 190) { const nz = 0.32 * Math.exp(-(((y - 157) / 13) ** 2) - (az / 15) ** 2); cr = lerp(cr, NOSEC.r, nz); cg = lerp(cg, NOSEC.g, nz); cb = lerp(cb, NOSEC.b, nz); }
+      hCol[o] = cr; hCol[o + 1] = cg; hCol[o + 2] = cb;
+    }
+  }
+  gridNormals(hPos, hNrm); cavity(); hg.attributes.position.needsUpdate = hg.attributes.color.needsUpdate = hg.attributes.normal.needsUpdate = true; if (!hg.boundingSphere) hg.computeBoundingSphere();
+}
+
+/* ── 기관: 시상 윤곽을 좌우 대칭으로 부풀린 입체 ── */
+function solid(shape, u) {
+  const g = new THREE.ExtrudeGeometry(shape, { depth: u.depth, bevelEnabled: true, bevelThickness: u.bt, bevelSize: u.bs, bevelOffset: -u.bs, bevelSegments: u.seg || 9, curveSegments: 20 });
+  g.translate(0, 0, -u.depth / 2); return g;
+}
+function organ(d, m, mCut, u, parent = head) {
+  const tpl = cmds(d), g = solid(shapeFrom(tpl, nums(d)), u), a = new THREE.Mesh(g, m), b = new THREE.Mesh(g, mCut);
+  a.castShadow = a.receiveShadow = true; a.renderOrder = b.renderOrder = 2; a.userData = { tpl, u, twin: b }; parent.add(a, b); return a;
+}
+function reshape(mesh, n) { const g = solid(shapeFrom(mesh.userData.tpl, n), mesh.userData.u); mesh.geometry.dispose(); mesh.geometry = g; mesh.userData.twin.geometry = g; }
+const P = {
+  bone:   organ(BONE, mat.bone, mat.boneCut, { depth: 100, bt: 12, bs: 4.4 }),
+  velum:  organ(VEL.up, mat.velum, mat.velumCut, { depth: 60, bt: 10, bs: 4 }),
+};
+/* 혀: 시상 윤곽(2D 경로)을 좌우로 부풀린 곡면. 옆으로 갈수록 윤곽이 중심 쪽으로 줄어들고(앞쪽은 더 빨리 줄어 혀끝이 둥글다),
+   소리에 따라 혀 옆을 올리거나(치찰음의 가운데 홈, 폐쇄음의 밀착) 내린다(설측음 [l]) */
+const T_PER = 14, T_NS = 7 * T_PER, T_NT = 27, T_W = 35, S01 = v => { const t = Math.min(1, Math.max(0, v)); return t * t * (3 - 2 * t); };
+const tgG = new THREE.BufferGeometry(), tPos = new Float32Array(T_NS * T_NT * 3), tLat = []; for (let j = 0; j < T_NT; j++) tLat.push(Math.sin((j / (T_NT - 1) - 0.5) * Math.PI));
+{ const idx = []; for (let k = 0; k < T_NS; k++) for (let j = 0; j < T_NT - 1; j++) { const a = k * T_NT + j, b = a + 1, c = ((k + 1) % T_NS) * T_NT + j, d = c + 1; idx.push(a, b, c, b, d, c); } tgG.setIndex(idx); }
+tgG.setAttribute('position', new THREE.BufferAttribute(tPos, 3)); tgG.boundingSphere = new THREE.Sphere(new THREE.Vector3(15, -20, 0), 220);
+{ const a = new THREE.Mesh(tgG, mat.tongue), b = new THREE.Mesh(tgG, mat.tongueCut); a.castShadow = a.receiveShadow = true; a.renderOrder = b.renderOrder = 2; head.add(a, b); }
+const _tp = new Float32Array(T_NS * 2);
+/* 정중 단면의 절단면: 머리를 한가운데까지 잘랐을 때, 시상 윤곽 그대로의 면을 절단 평면 바로 안쪽에 그린다 */
+const capMat = c => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+const caps = new THREE.Group(); head.add(caps);
+const capTG = new THREE.BufferGeometry(), capTP = new Float32Array(T_NS * 3), _tv = Array.from({ length: T_NS }, () => new THREE.Vector2()); capTG.setAttribute('position', new THREE.BufferAttribute(capTP, 3));
+const capBone = new THREE.Mesh(new THREE.ShapeGeometry(shapeFrom(cmds(BONE), nums(BONE)), 16), capMat(0xe4dccb)), capVelum = new THREE.Mesh(new THREE.BufferGeometry(), capMat(0xc98780)), capTongue = new THREE.Mesh(capTG, capMat(0xb04f4d));
+for (const m of [capBone, capVelum, capTongue]) { m.renderOrder = 2; m.frustumCulled = false; caps.add(m); }
+const capLG = new THREE.BufferGeometry(), capLip = new THREE.Mesh(capLG, capMat(0xe6bfa9)); capLip.renderOrder = 1.5; capLip.frustumCulled = false; caps.add(capLip);
+function lipCap(n, j) {      // n: 턱 회전을 반영한 피부 윤곽. 아랫입술 위끝(n[38..39])에서 턱 홈까지의 겉선 + 아랫니 앞의 안쪽 선
+  const pts = [[n[38], n[39]]]; let px = n[38], py = n[39];
+  for (let c = 0; c < 2; c++) { const i = 40 + c * 6; for (let k = 1; k <= 10; k++) { const t = k / 10, u = 1 - t; pts.push([u * u * u * px + 3 * u * u * t * n[i] + 3 * u * t * t * n[i + 2] + t * t * t * n[i + 4], u * u * u * py + 3 * u * u * t * n[i + 1] + 3 * u * t * t * n[i + 3] + t * t * t * n[i + 5]]); } px = n[i + 4]; py = n[i + 5]; }
+  for (const [x, y] of [[90, 262], [91, 240], [91, 224]]) pts.push(rotPt(x, y, j, 1));
+  const pos = new Float32Array(pts.length * 3), v2 = pts.map(([x, y], k) => { pos[k * 3] = x - 175; pos[k * 3 + 1] = 250 - wy(y); return new THREE.Vector2(pos[k * 3], pos[k * 3 + 1]); });
+  capLG.setAttribute('position', new THREE.BufferAttribute(pos, 3)); capLG.setIndex(THREE.ShapeUtils.triangulateShape(v2, []).flat());
+}
+function buildTongue(n, tg) {
+  let i = 2, px = n[0], py = n[1], q = 0, cx = 0, cy = 0, xmin = 1e9;
+  for (let c = 0; c < 7; c++) { const x1 = n[i], y1 = n[i + 1], x2 = n[i + 2], y2 = n[i + 3], x3 = n[i + 4], y3 = n[i + 5];
+    for (let k = 1; k <= T_PER; k++) { const t = k / T_PER, u = 1 - t, x = u * u * u * px + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3, y = u * u * u * py + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3; _tp[q++] = x; _tp[q++] = y; cx += x; cy += y; if (x < xmin) xmin = x; }
+    px = x3; py = y3; i += 6; }
+  cx /= T_NS; cy /= T_NS;
+  for (let k = 0; k < T_NS; k++) {
+    const qx = _tp[k * 2], qy = _tp[k * 2 + 1], top = k < 3.3 * T_PER ? 1 : Math.max(0, 1 - (k - 3.3 * T_PER) / (0.7 * T_PER));      // 윗면(혀끝→혀뿌리)만 옆 모양을 바꾼다
+    const blade = (1 - S01((qx - xmin - 12) / 75)) * top, mid = S01((qx - xmin - 8) / 25) * (1 - S01((qx - xmin - 70) / 50)) * top;
+    const nf = 3.4 - 0.8 * S01(((cx - qx) / (cx - xmin) - 0.3) / 0.7);          // 앞쪽일수록 지수를 낮춰 혀끝을 둥글게
+    for (let j = 0; j < T_NT; j++) {
+      const t = tLat[j], at = Math.abs(t), sc = Math.pow(Math.max(0, 1 - Math.pow(at, nf)), 1 / nf), dy = -tg[0] * S01((at - 0.12) / 0.4) * blade + tg[1] * S01((at - 0.3) / 0.5) * mid, o = (k * T_NT + j) * 3;
+      tPos[o] = cx + (qx - cx) * sc - 175; tPos[o + 1] = 250 - wy(cy + (qy + dy - cy) * sc); tPos[o + 2] = T_W * t;
+    }
+  }
+  tgG.attributes.position.needsUpdate = true; tgG.computeVertexNormals();
+  for (let k = 0; k < T_NS; k++) { const x = _tp[k * 2] - 175, y = 250 - wy(_tp[k * 2 + 1]); capTP[k * 3] = x; capTP[k * 3 + 1] = y; _tv[k].set(x, y); }
+  capTG.setIndex(THREE.ShapeUtils.triangulateShape(_tv, []).flat()); capTG.attributes.position.needsUpdate = true;
+}
+/* 치열: 앞니(끌 모양)·송곳니(뾰족)·어금니(네모, 씹는 면이 오목)를 U자로 배열하고 잇몸을 두른다. 아랫니·아래 잇몸은 턱과 함께 움직인다 */
+const jawG = new THREE.Group(); jawG.position.copy(W(PIVOT[0], PIVOT[1], 0)); head.add(jawG);
+function toothGeo(kind) {
+  const g = new THREE.SphereGeometry(1, 20, 16), p = g.attributes.position, e = kind === 1 ? 0.7 : 0.52, f = v => Math.sign(v) * Math.pow(Math.abs(v), e);
+  for (let i = 0; i < p.count; i++) {
+    let x = f(p.getX(i)), y = f(p.getY(i)), z = f(p.getZ(i)); const bite = Math.max(0, -y);          // −Y가 씹는 쪽
+    if (kind === 0) { x *= 1 - 0.6 * bite * bite; z *= 0.95 + 0.05 * bite; } else if (kind === 1) { const k = 1 - 0.5 * bite * bite; x *= k; z *= k; } else y += 0.16 * bite * Math.exp(-(x * x + z * z) / 0.3);
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals(); return g;
+}
+const TGEO = [toothGeo(0), toothGeo(1), toothGeo(2)];
+const AX = [93, 96, 103, 115, 129, 147, 167], AZ = [5.9, 17.3, 28.2, 37.1, 43.5, 48.6, 52.5], TW = [12.2, 11.6, 11.5, 12.5, 13.5, 18.5, 19], TT = [5.6, 5.6, 7.6, 9.6, 10.6, 13, 13.4], TH = [13.5, 13, 13.5, 11, 10.5, 10, 9.6], TK = [0, 0, 1, 2, 2, 2, 2];
+for (let i = 0; i < 7; i++) for (const sd of [1, -1]) for (const lower of [false, true]) {
+  const xp = i ? AX[i - 1] : AX[0], zp = i ? AZ[i - 1] : -AZ[0], xn = i < 6 ? AX[i + 1] : AX[6] + 18, zn = i < 6 ? AZ[i + 1] : AZ[6] + 3, yaw = Math.atan2(xn - xp, sd * (zn - zp)), k = lower ? 0.94 : 1;
+  const p = W(AX[i] + (lower ? 2 : 0), lower ? 235 : 202, sd * AZ[i] * (lower ? 0.96 : 1)); if (lower) p.sub(jawG.position);
+  for (const m of [new THREE.Mesh(TGEO[TK[i]], mat.tooth), new THREE.Mesh(TGEO[TK[i]], mat.toothCut)]) { m.position.copy(p); m.rotation.y = yaw; m.scale.set(TT[i] / 2 * k, TH[i] * (lower ? -0.92 : 1), TW[i] / 2 * k); m.renderOrder = 2; if (m.material === mat.tooth) m.castShadow = m.receiveShadow = true; (lower ? jawG : head).add(m); }
+}
+for (const lower of [false, true]) {
+  const pts = [], f = lower ? 0.96 : 1, dx = lower ? 2 : 0; pts.push(new THREE.Vector3(186 + dx - 175, 0, -55 * f)); for (let i = 6; i >= 0; i--) pts.push(new THREE.Vector3(AX[i] + dx - 175, 0, -AZ[i] * f)); for (let i = 0; i < 7; i++) pts.push(new THREE.Vector3(AX[i] + dx - 175, 0, AZ[i] * f)); pts.push(new THREE.Vector3(186 + dx - 175, 0, 55 * f));
+  const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 72, 7.5, 12, false); g.scale(1, 1.3, 1);
+  const pos = new THREE.Vector3(0, 250 - wy(lower ? 247 : 190), 0); if (lower) pos.sub(jawG.position);
+  for (const m of [new THREE.Mesh(g, mat.gum), new THREE.Mesh(g, mat.gumCut)]) { m.position.copy(pos); m.renderOrder = 2; if (m.material === mat.gum) m.castShadow = m.receiveShadow = true; (lower ? jawG : head).add(m); }
+}
+/* 눈·귀·입 안 */
+const extras = new THREE.Group(); head.add(extras);
+/* 눈: 흰자는 피부 곡면에 가장자리를 맞춘 돔, 속눈썹 선은 눈 윗윤곽을 따라 피부에 붙인 띠(양 끝이 가늘다). 표정이 바뀌면 피부가 조금 움직이므로 placeEyes에서 다시 맞춘다 */
+const EYE = { y: 128, z: 64, k: 1.85, a: 14.2, b: 17.8, D: 1.9 }, eyes = [], E_R = 14, E_T = 48, L_N = 28;
+for (const s of [1, -1]) {
+  const g = new THREE.Group(); g.scale.setScalar(EYE.k); extras.add(g);          // 눈 묶음: +Z가 얼굴 바깥, +X는 왼쪽(관찰자 기준 z+)
+  const sg = new THREE.BufferGeometry(), sp = new Float32Array((E_R + 1) * E_T * 3), lg = new THREE.BufferGeometry(), lp = new Float32Array((L_N + 1) * 12);
+  { const idx = []; for (let r = 0; r < E_R; r++) for (let t = 0; t < E_T; t++) { const a = r * E_T + t, b = (r + 1) * E_T + t, c = (r + 1) * E_T + (t + 1) % E_T, d = r * E_T + (t + 1) % E_T; idx.push(a, b, c, a, c, d); } sg.setIndex(idx); }
+  { const idx = []; for (let i = 0; i < L_N; i++) for (let q = 0; q < 3; q++) { const a = i * 4 + q, b = a + 1, c = a + 4, d = a + 5; idx.push(a, c, b, b, c, d); } lg.setIndex(idx); }
+  sg.setAttribute('position', new THREE.BufferAttribute(sp, 3)); lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
+  g.add(new THREE.Mesh(sg, eyeMat(s)), new THREE.Mesh(lg, mat.lash));
+  eyes.push({ g, s, sg, sp, lg, lp });
+}
+/* 얼굴 앞면의 x(세계 좌표)를 높이 Y·좌우 z에서 읽는다: 머리 표면 격자를 그대로 보간 */
+function rowX(r, z) {
+  const o = r * NC * 3; let i = NC / 2;
+  if (z >= 0) { while (i < NC - 2 && hPos[o + (i + 1) * 3 + 2] < z) i++; } else { while (i > 1 && hPos[o + (i - 1) * 3 + 2] > z) i--; i--; }
+  const z0 = hPos[o + i * 3 + 2], z1 = hPos[o + i * 3 + 5], x0 = hPos[o + i * 3], x1 = hPos[o + i * 3 + 3];
+  return x0 + (x1 - x0) * Math.min(1, Math.max(0, (z - z0) / (z1 - z0 || 1)));
+}
+function faceX(Yw, z) { const y = 250 - Yw; let lo = 0, hi = NR - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ROWS[m] <= y) lo = m; else hi = m; } return lerp(rowX(lo, z), rowX(hi, z), Math.min(1, Math.max(0, (y - ROWS[lo]) / (ROWS[hi] - ROWS[lo])))); }
+const _p = new THREE.Vector3(), _n = new THREE.Vector3(), _m4 = new THREE.Matrix4();
+function placeEyes() {
+  for (const e of eyes) {
+    const { g, s, sp, lp } = e, Y0 = 250 - EYE.y, z0 = s * EYE.z, h = 8;
+    _n.set(-1, (faceX(Y0 + h, z0) - faceX(Y0 - h, z0)) / (2 * h), (faceX(Y0, z0 + h) - faceX(Y0, z0 - h)) / (2 * h)).normalize().multiplyScalar(0.45); _n.x -= 0.55; _n.normalize();
+    g.position.set(faceX(Y0, z0), Y0, z0); _m4.lookAt(_p.copy(g.position).add(_n), g.position, g.up); g.quaternion.setFromRotationMatrix(_m4); g.updateMatrix();      // 머리 묶음이 움직여도(반응 동작) 어긋나지 않게 머리 안 좌표로만 방향을 정한다
+    const M4 = g.matrix, ezx = M4.elements[8];
+    const zs = (x, y) => { let t = 0; for (let it = 0; it < 2; it++) { _p.set(x, y, t).applyMatrix4(M4); t += (faceX(_p.y, _p.z) - _p.x) / ezx; } return t; };      // 눈 좌표계에서 본 피부 높이
+    for (let r = 0; r <= E_R; r++) {
+      const rho = r / E_R, dome = EYE.D * Math.sqrt(1 - rho * rho) - 0.45 * Math.pow(rho, 8);      // 피부 위로 살짝 볼록, 가장자리는 피부 바로 밑
+      for (let t = 0; t < E_T; t++) { const th = t / E_T * 2 * Math.PI, x = EYE.a * rho * Math.cos(th), y = EYE.b * rho * Math.sin(th), o = (r * E_T + t) * 3; const qx = (x + s * 0.5) / 12, qy = (y - 1.5) / 15.4, ri2 = qx * qx + qy * qy; sp[o] = x; sp[o + 1] = y; sp[o + 2] = dome + zs(x, y) + (ri2 < 1 ? 1.5 * Math.pow(1 - ri2, 1.5) : 0); }
+    }
+    e.sg.attributes.position.needsUpdate = true; e.sg.computeVertexNormals(); e.sg.computeBoundingSphere();
+    for (let i = 0; i <= L_N; i++) {
+      const u = i / L_N, al = THREE.MathUtils.degToRad(lerp(160, 14, u)), c = Math.cos(al) * s, sn = Math.sin(al);
+      const wv = 0.12 + 2.2 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.8)), 0.9) * (0.5 + 0.5 * u), fl = u > 0.8 ? 1.6 * ((u - 0.8) / 0.2) ** 2 : 0;      // 굵기: 바깥쪽 3분의 1이 가장 굵고 끝은 살짝 들린다
+      const r0 = 0.96 + fl / 16, r1 = r0 + wv / 16, xi = EYE.a * r0 * c, yi = EYE.b * r0 * sn, xo = EYE.a * r1 * c, yo = EYE.b * r1 * sn, zi = zs(xi, yi), zo = zs(xo, yo);
+      lp.set([xi, yi, zi - 1.4, xi, yi, zi + 0.6, xo, yo, zo + 0.6, xo, yo, zo - 1.4], i * 12);
+    }
+    e.lg.attributes.position.needsUpdate = true; e.lg.computeVertexNormals(); e.lg.computeBoundingSphere();
+  }
+}
+/* 귀: 타원 판에 귓바퀴 테두리(이륜)·안쪽 능선(대이륜)·오목한 귓구멍 쪽(이갑개)을 높낮이로 새긴다 */
+function earGeo() {
+  const R = 18, T = 64, n = (R + 1) * T, pos = new Float32Array((2 * n - T) * 3), col = new Float32Array((2 * n - T) * 3), idx = [], IN = new THREE.Color(0xd9a08a);
+  const S = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+  for (let r = 0; r <= R; r++) for (let t = 0; t < T; t++) {
+    const rho = r / R, th = t / T * 2 * Math.PI, c = Math.cos(th), sn = Math.sin(th), deg = (th > Math.PI ? th - 2 * Math.PI : th) * 180 / Math.PI;      // 0° = 뒤, 90° = 위, ±180° = 얼굴 쪽
+    const x = 16 * rho * c * (1 - 0.22 * Math.max(0, -sn)), y = 24 * rho * sn;          // 아래(귓불)는 좁게
+    const wr = S(-105, -50, deg) * (1 - S(130, 178, deg)), wa = S(-75, -20, deg) * (1 - S(65, 120, deg)), edge = Math.sqrt(1 - Math.pow(rho, 10));
+    const qx = rho * c + 0.2, qy = rho * sn + 0.06, bowl = Math.exp(-(qx * qx + qy * qy) / 0.13), groove = wr * Math.exp(-(((rho - 0.67) / 0.07) ** 2));
+    const zf = (2.4 * Math.sqrt(Math.max(0, 1 - rho ** 4)) + 3.6 * wr * Math.exp(-(((rho - 0.83) / 0.12) ** 2)) + 1.5 * wa * Math.exp(-(((rho - 0.5) / 0.1) ** 2))) * edge - 3.2 * bowl * (1 - rho ** 6);
+    const k = Math.min(1, 0.85 * bowl + 0.3 * groove), f = (r * T + t) * 3;
+    pos[f] = x; pos[f + 1] = y; pos[f + 2] = zf; col[f] = lerp(SKINC.r, IN.r, k); col[f + 1] = lerp(SKINC.g, IN.g, k); col[f + 2] = lerp(SKINC.b, IN.b, k);
+    if (r < R) { const b = (n + r * T + t) * 3; pos[b] = x; pos[b + 1] = y; pos[b + 2] = -3.4 * Math.sqrt(1 - rho * rho); col[b] = SKINC.r; col[b + 1] = SKINC.g; col[b + 2] = SKINC.b; }
+  }
+  const F = (r, t) => r * T + t % T, Bk = (r, t) => r === R ? F(r, t) : n + r * T + t % T;
+  for (let r = 0; r < R; r++) for (let t = 0; t < T; t++) { idx.push(F(r, t), F(r + 1, t), F(r + 1, t + 1), F(r, t), F(r + 1, t + 1), F(r, t + 1)); idx.push(Bk(r, t), Bk(r + 1, t + 1), Bk(r + 1, t), Bk(r, t), Bk(r, t + 1), Bk(r + 1, t + 1)); }
+  const g = new THREE.BufferGeometry(); g.setIndex(idx); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals(); return g;
+}
+{ const eg = earGeo(); for (const s of [1, -1]) { const ear = new THREE.Mesh(eg, mat.ear); ear.castShadow = ear.receiveShadow = true; ear.position.copy(W(317, 144, s * 160)); ear.scale.set(1.25, 1.25, s * 1.25); ear.rotation.set(0, -s * 0.5, -0.12); extras.add(ear); } }
+/* 머리카락: 머리 표면을 바깥으로 부풀린 껍질. 이마선(HL) 아래는 그리지 않는다 */
+const kg = new THREE.BufferGeometry(); kg.setIndex(hg.index);
+const kPos = new Float32Array(NR * NC * 3), kCol = new Float32Array(NR * NC * 3), kA = new Float32Array(NR * NC), kZ = new Float32Array(NR * NC), kTan = new Float32Array(NR * NC * 4);
+kg.setAttribute('position', new THREE.BufferAttribute(kPos, 3)); kg.setAttribute('color', new THREE.BufferAttribute(kCol, 3)); kg.setAttribute('tangent', new THREE.BufferAttribute(kTan, 4)); kg.setAttribute('ha', new THREE.BufferAttribute(kA, 1)); kg.setAttribute('hz', new THREE.BufferAttribute(kZ, 1)); kg.setAttribute('ysvg', hg.attributes.ysvg);
+const hair = new THREE.Mesh(kg, mat.hair), hairBack = new THREE.Mesh(kg, mat.hairCut); hair.castShadow = hair.receiveShadow = true; hair.customDepthMaterial = hairDepth; hair.renderOrder = 4; hairBack.renderOrder = 0; head.add(hairBack, hair);
+const HAIRC = new THREE.Color(0x8a5c3c), HAIRD = new THREE.Color(0x5e3d28);
+const HL = [[0, 55], [0.5, 57], [0.85, 62], [1.05, 92], [1.3, 138], [1.45, 146], [1.56, 120], [1.76, 120], [1.88, 160], [2.05, 220], [2.3, 280], [3.15, 300]];
+const lin = (T, v) => { let k = 1; while (k < T.length - 1 && T[k][0] < v) k++; const [a0, b0] = T[k - 1], [a1, b1] = T[k]; return b0 + (b1 - b0) * Math.min(1, Math.max(0, (v - a0) / (a1 - a0))); };   // 앞(0)→옆→뒤(π): 머리카락이 내려오는 높이
+/* 끝선 표를 0–π에 고르게 64칸으로 옮기면서 모서리를 둥글린다(직선 보간 그대로면 귀 둘레가 각진다) */
+{ const T = LIPU.uHL.value; for (let i = 0; i < 64; i++) { const a = i / 63 * Math.PI; let v = 0, w = 0; for (let k = -4; k <= 4; k++) { const g = Math.exp(-((k / 2.2) ** 2)); v += g * lin(HL, a + k * 0.03); w += g; } T[i] = v / w; } }
+const hlAt = a => { const f = Math.min(63, Math.max(0, a / Math.PI * 63)), i = Math.min(62, Math.floor(f)), T = LIPU.uHL.value; return T[i] + (T[i + 1] - T[i]) * (f - i); };
+function buildHair() {
+  const cx = 300 - 175, cy = 250 - 108;
+  for (let r = 0; r < NR; r++) {
+    const y = ROWS[r];
+    for (let i = 0; i < NC; i++) {
+      const [px, pz] = COL[i], o = (r * NC + i) * 3, a = Math.atan2(Math.abs(pz), px), z = hPos[o + 2];
+      let yH = hlAt(a); if (a < 1) yH += (6 * Math.sin(z * 0.1 + 0.7) + 0.11 * z) * (1 - a);        // 앞머리: 살짝 옆으로 넘긴 물결
+      const d = yH - y, m = Math.min(1, Math.max(0, d / 30)), f = 1 + 0.03 + 0.09 * m * m * (3 - 2 * m);
+      kPos[o] = cx + (hPos[o] - cx) * f; kPos[o + 1] = cy + (hPos[o + 1] - cy) * f; kPos[o + 2] = z * f;
+      kA[r * NC + i] = a; kZ[r * NC + i] = z;
+      const t = 0.5 + 0.5 * Math.sin(i * 1.7 + Math.sin(r * 0.09) * 1.6 + Math.sin(i * 0.37) * 2), k = 0.3 + 0.7 * t;
+      kCol[o] = lerp(HAIRD.r, HAIRC.r, k); kCol[o + 1] = lerp(HAIRD.g, HAIRC.g, k); kCol[o + 2] = lerp(HAIRD.b, HAIRC.b, k);
+    }
+  }
+  kg.attributes.position.needsUpdate = kg.attributes.color.needsUpdate = kg.attributes.ha.needsUpdate = kg.attributes.hz.needsUpdate = true; kg.computeVertexNormals(); kg.computeBoundingSphere();
+  /* 정수리(맨 윗줄)는 꼭짓점이 한 점에 모여 둘레 방향이 없다: 바로 아랫줄의 접선을 물려받는다(0 벡터면 셰이더에서 NaN이 되어 검게 칠해진다) */
+  for (let r = NR - 1; r >= 0; r--) for (let i = 0; i < NC; i++) { const a = (r * NC + (i + NC - 1) % NC) * 3, b = (r * NC + (i + 1) % NC) * 3, o = (r * NC + i) * 4, x = kPos[b] - kPos[a], y = kPos[b + 1] - kPos[a + 1], z = kPos[b + 2] - kPos[a + 2], l = Math.sqrt(x * x + y * y + z * z);
+    if (l > 1e-4) { kTan[o] = x / l; kTan[o + 1] = y / l; kTan[o + 2] = z / l; } else if (r < NR - 1) { const q = o + NC * 4; kTan[o] = kTan[q]; kTan[o + 1] = kTan[q + 1]; kTan[o + 2] = kTan[q + 2]; } else { kTan[o] = 0; kTan[o + 1] = 0; kTan[o + 2] = 1; }
+    kTan[o + 3] = 1; }
+  kg.attributes.tangent.needsUpdate = true;
+}
+/* 후드 깃 */
+{ const cg = new THREE.TorusGeometry(110, 25, 18, 64); cg.rotateX(Math.PI / 2);
+  for (const m of [mat.hood, mat.hoodCut]) { const c = new THREE.Mesh(cg, m); c.position.copy(W(306, 478, 0)); c.scale.set(1, 1.3, 0.8); c.rotation.z = 0.1; c.renderOrder = m === mat.hood ? 3 : 0; if (m === mat.hood) c.castShadow = c.receiveShadow = true; head.add(c); } }
+/* 꾸미기: 랭크가 오르면 풀리는 머리색·후드색·소품. 소품은 눈·귀와 같은 묶음(extras)이라 정중 단면에서는 함께 숨는다 */
+const HAIRS = [[0x8a5c3c, 0x5e3d28, 0xd9a878], [0x3d3640, 0x1f1b24, 0x8a8494], [0xdcb86e, 0xa8853f, 0xfff0c0], [0xb04e30, 0x6e2a1c, 0xf0a070], [0xe391ac, 0xb85c7c, 0xffd6e2]];
+const HOODS = [[0x9dbde6, 0x86a6d0], [0x9edcc2, 0x84c2a8], [0xf2a48f, 0xd88a76], [0xf0d27c, 0xd6b862], [0xc3b0e8, 0xa996ce]];
+mat.frame = M(0x2a2622, { roughness: 0.35, clearcoat: 0.6 }); mat.cup = M(0xf2a48f, { roughness: 0.6 }); mat.capM = M(0x252b40, { roughness: 0.8 }); mat.gold = M(0xd9b24a, { roughness: 0.35, metalness: 0.4 });
+const ACCG = [null, new THREE.Group(), new THREE.Group(), new THREE.Group()], rings = [];      // 1 안경 · 2 헤드폰 · 3 학사모
+for (const g of ACCG) if (g) { g.visible = false; extras.add(g); }
+const rod = (a, b, r, m, parent) => { const d = b.clone().sub(a), c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), 12), m); c.position.copy(a).addScaledVector(d, 0.5); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()); parent.add(c); return c; };
+{ const rg = new THREE.TorusGeometry(16.8, 1.15, 10, 44); for (const e of eyes) { const r = new THREE.Mesh(rg, mat.frame); r.scale.y = 1.2; r.position.z = 4.3; r.visible = false; e.g.add(r); rings.push(r); }
+  const cg2 = new THREE.CylinderGeometry(33, 33, 14, 32); cg2.rotateX(Math.PI / 2); const sh2 = new THREE.SphereGeometry(1, 28, 14);
+  for (const sd of [1, -1]) { const c = new THREE.Mesh(cg2, mat.cup); c.position.set(142, 100, sd * 184); const o = new THREE.Mesh(sh2, mat.frame); o.scale.set(31, 31, 11); o.position.set(142, 100, sd * 191); ACCG[2].add(c, o); }
+  /* 학사모: 판의 가운데를 기준점으로 묶고 앞으로 기울여 쓴다. 눈높이에서 보는 정면 인셋에서는 판이 수평이면 모서리 선만 보여 모자로 읽히지 않는다 */
+  const CT = 0.35; ACCG[3].position.set(115, 394, 0); ACCG[3].rotation.z = CT;
+  const sk = new THREE.Mesh(new THREE.CylinderGeometry(112, 124, 73, 36), mat.capM); sk.position.set(0, -38.5, 0); const bd = new THREE.Mesh(new THREE.BoxGeometry(214, 6, 214), mat.capM); bd.rotation.y = Math.PI / 4;
+  const bt = new THREE.Mesh(new THREE.SphereGeometry(6, 14, 10), mat.gold); bt.position.set(0, 5, 0); ACCG[3].add(sk, bd, bt);
+  const ta = new THREE.Vector3(0, 4, 140), dn = new THREE.Vector3(-Math.sin(CT), -Math.cos(CT), 0);      // 술은 모자가 기울어도 곧게 아래로 늘어진다
+  rod(new THREE.Vector3(0, 5, 0), ta, 1.6, mat.gold, ACCG[3]); rod(ta, ta.clone().addScaledVector(dn, 51).setZ(142), 1.6, mat.gold, ACCG[3]);
+  const tf = new THREE.Mesh(new THREE.CylinderGeometry(4, 6, 22, 10), mat.gold); tf.position.copy(ta).addScaledVector(dn, 61).setZ(142); tf.rotation.z = -CT; ACCG[3].add(tf);
+  for (const g of ACCG) if (g) g.traverse(o => { if (o.isMesh) o.castShadow = true; }); }
+/* 안경다리: 테의 바깥 끝에서 귀 위까지 머리 옆면을 따라 살짝 띄워 잇는다(곧은 막대는 볼·관자놀이 속으로 파고들어 끊겨 보였다). 머리 표면이 만들어진 뒤 한 번 만든다 */
+function rowZ(r, xw, sd) { const o = r * NC * 3, m = NC / 2; for (let k = 1; k < m; k++) { const a = o + (m + sd * (k - 1)) * 3, b = o + (m + sd * k) * 3; if (hPos[b] >= xw) { const t = Math.min(1, Math.max(0, (xw - hPos[a]) / ((hPos[b] - hPos[a]) || 1e-6))); return hPos[a + 2] + (hPos[b + 2] - hPos[a + 2]) * t; } } return 0; }
+function sideZ(Yw, xw, sd) { const y = 250 - Yw; let lo = 0, hi = NR - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ROWS[m] <= y) lo = m; else hi = m; } return lerp(rowZ(lo, xw, sd), rowZ(hi, xw, sd), Math.min(1, Math.max(0, (y - ROWS[lo]) / (ROWS[hi] - ROWS[lo])))); }
+function buildArms() {
+  /* 테: 눈자리가 들어가 있어 테가 눈썹뼈·볼에 묻혀 군데군데 끊겨 보였다 → 테 전체가 피부 앞에 나올 때까지 앞으로 띄운다 */
+  const R = 16.8, need = 1.15 * EYE.k + 1.5, p = new THREE.Vector3(); let d = 4.3;
+  for (; d < 16; d += 0.4) { let ok = true; for (const e of eyes) for (let i = 0; i < 48 && ok; i++) { const th = i / 48 * 2 * Math.PI; p.set(Math.cos(th) * R, Math.sin(th) * R * 1.2, d).applyMatrix4(e.g.matrix); if (faceX(p.y, p.z) - p.x < need) ok = false; } if (ok) break; }
+  for (const r of rings) r.position.z = d;
+  const tube = (pts, rad) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 56, rad, 8, false), mat.frame); m.castShadow = true; ACCG[1].add(m); };
+  for (const e of eyes) { const sd = e.s, h = new THREE.Vector3(sd * R, 0, d).applyMatrix4(e.g.matrix), end = W(312, 127, 0), pts = [h.clone()];
+    for (let i = 1; i <= 14; i++) { const t = i / 14, x = lerp(h.x, end.x, t), y = lerp(h.y, end.y, t); pts.push(new THREE.Vector3(x, y, sd * Math.max(Math.abs(h.z), Math.abs(sideZ(y, x, sd)) + 3.2))); }
+    tube(pts, 1.6); }
+  { const a = new THREE.Vector3(-eyes[0].s * R, 0, d).applyMatrix4(eyes[0].g.matrix), b = new THREE.Vector3(-eyes[1].s * R, 0, d).applyMatrix4(eyes[1].g.matrix), mid = a.clone().lerp(b, 0.5);      // 코걸이: 두 테의 안쪽 끝을 콧등 앞으로 살짝 솟은 곡선으로 잇는다
+    mid.y += 4; mid.x = Math.min(mid.x - 2, faceX(mid.y, 0) - 4.5); tube([a, a.clone().lerp(mid, 0.55).setY(mid.y - 0.6), mid, b.clone().lerp(mid, 0.55).setY(mid.y - 0.6), b], 1.8); }
+}
+/* 헤드폰 띠: 귀 높이에서 정수리를 넘어 반대쪽 귀까지, 머리카락 겉면(kPos)을 따라 얹는다(타원 하나로 그리면 옆머리 속으로 파고들어 끊겨 보였다).
+   귀 위로 곧게 세우면 앞쪽 머리카락에 가려 정면(인셋)에서 띠가 보이지 않으므로, 정수리 쪽이 앞으로 기울게 쓴다(TILT: 정수리에서 앞으로 나오는 거리). 머리카락이 만들어진 뒤 한 번 만든다 */
+function buildBand() {
+  const N = 44, X0 = 142, Y0 = 100, TILT = 80 / 270, rr = new Float32Array(N + 1);
+  for (let o = 0; o < kPos.length; o += 3) { const y = kPos[o + 1] - Y0, z = kPos[o + 2]; if (y < 0 || Math.abs(kPos[o] - (X0 - TILT * y)) > 30) continue; const b = Math.round(Math.atan2(y, z) / Math.PI * N), r = Math.hypot(y, z); if (r > rr[b]) rr[b] = r; }
+  for (let i = 0; i <= N; i++) if (!rr[i]) { let a = i, b = i; while (a > 0 && !rr[a]) a--; while (b < N && !rr[b]) b++; rr[i] = rr[a] && rr[b] ? (rr[a] + rr[b]) / 2 : rr[a] || rr[b]; }
+  for (let q = 0; q < 2; q++) { const c = rr.slice(); for (let i = 1; i < N; i++) rr[i] = Math.max(c[i], (c[i - 1] + 2 * c[i] + c[i + 1]) / 4); }
+  const pts = []; for (let i = 0; i <= N; i++) { const th = Math.PI * i / N, e = Math.min(1, Math.sin(th) / 0.3), r = 186 + (rr[i] + 4 - 186) * e * e * (3 - 2 * e); pts.push(new THREE.Vector3(X0 - TILT * r * Math.sin(th), Y0 + r * Math.sin(th), r * Math.cos(th))); }
+  const band = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 96, 5.5, 10, false), mat.frame); band.castShadow = true; ACCG[2].add(band);
+}
+function applyLook(look) {
+  const h = HAIRS[look[0]] || HAIRS[0], hd = HOODS[look[1]] || HOODS[0];
+  HAIRC.set(h[0]); HAIRD.set(h[1]); mat.hair.sheenColor.set(h[2]); mat.hairCut.color.set(h[1]); buildHair();
+  mat.hood.color.set(hd[0]); mat.hoodCut.color.set(hd[1]);
+  ACCG.forEach((g, i) => { if (g) g.visible = look[2] === i; }); rings.forEach(r => { r.visible = look[2] === 1; });
+  const f = look[2] === 3 ? 1.15 : 1.02; if (f !== FIT) { FIT = f; setView(lastView); }
+  { const fov = [20, 20, 22.2, 23.5][look[2]] || 20, half = d => 1620 * Math.tan(d * Math.PI / 360), cy = W(0, 205, 0).y + half(fov) - half(20);      // 정면 인셋: 헤드폰·학사모는 머리 위로 올라오므로 아래쪽은 그대로 두고 위로 넓혀 잡는다
+    frontCam.fov = fov; frontCam.position.set(-1505, cy, 0); frontCam.lookAt(-95, cy, 0); frontCam.updateProjectionMatrix(); }
+}
+const mouthIn = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), mat.dark); mouthIn.scale.set(104, 46, 68); mouthIn.position.copy(W(172, 214, 0)); mouthIn.renderOrder = 1; head.add(mouthIn);
+/* 정중 단면의 빈 공간(공기 통로) 칠: 머리를 한가운데까지 잘랐을 때만 */
+const paintA = new THREE.Mesh(new THREE.ShapeGeometry(shapeFrom(cmds(AIR_A), nums(AIR_A)), 16), mat.paint), paintB = new THREE.Mesh(new THREE.BufferGeometry(), mat.paint);
+const AIRB_TPL = cmds(AIR_B); for (const p of [paintA, paintB]) { p.position.z = -0.4; p.renderOrder = 1; head.add(p); }
+
+/* 성대·기류 */
+const foldG = new THREE.BoxGeometry(17, 5, 26);
+const foldL = new THREE.Mesh(foldG, mat.fold), foldR = new THREE.Mesh(foldG, mat.fold); [foldL, foldR].forEach(m => { m.renderOrder = 2; head.add(m); });
+const curve = pts => new THREE.CatmullRomCurve3(pts.map(([x, y]) => W(x, y, 0)));
+const ORAL  = curve([[288, 392], [290, 345], [292, 285], [276, 228], [232, 197], [170, 196], [112, 208], [72, 218], [10, 222]]);
+const NASAL = curve([[288, 392], [292, 345], [298, 262], [300, 192], [296, 142], [250, 112], [180, 110], [110, 128], [70, 166], [14, 176]]);
+const NP = 46, dots = [], dotG = new THREE.SphereGeometry(2.8, 12, 10);
+for (let i = 0; i < NP; i++) { const m = new THREE.Mesh(dotG, mat.air); m.userData = { u: i / NP, j: Math.random(), side: i % 2 ? 1 : -1 }; m.renderOrder = 4; head.add(m); dots.push(m); }
+/* 파열: 입 밖으로 나온 공기는 흩어지며 사라지는 입자로 그린다 */
+const NPUFF = 72, puffs = [], EXIT_DIR = ORAL.getTangentAt(0.95); let puffI = 0, burstT = 0, burstS = 0;
+for (let i = 0; i < NPUFF; i++) { const m = new THREE.Mesh(dotG, mat.air); m.visible = false; m.renderOrder = 4; m.userData = { life: 0, max: 1, v: new THREE.Vector3() }; head.add(m); puffs.push(m); }
+function puff(pos, speed, spread) { const m = puffs[puffI++ % NPUFF], u = m.userData; m.position.copy(pos); u.v.copy(EXIT_DIR).multiplyScalar(speed * (0.55 + 0.7 * Math.random())); u.v.y += (Math.random() - 0.5) * spread; u.v.z += (Math.random() - 0.5) * spread; u.life = u.max = 0.4 + Math.random() * 0.4; m.visible = true; }
+
+/* 라벨 */
+/* [글자, 글자 위치 x, y, 가리키는 점 x, y] — 가리키는 점이 있으면 지시선을 긋는다. 용어는 교재 p.189–190(Figure 5.1과 본문)의 것 */
+const TAGS = [['LIPS', -14, 230, 54, 219], ['TEETH', -20, 203, 90, 206], ['ALVEOLAR RIDGE', -40, 176, 106, 187], ['HARD PALATE', 196, 158, 180, 172], ['VELUM', 318, 130, 288, 152], ['NASAL CAVITY', 190, 124], ['ORAL CAVITY', 172, 194],
+  ['UVULA', 0, 0, 0, 0], ['TONGUE', 190, 292], ['PHARYNX', 350, 276, 298, 276], ['LARYNX', 232, 404, 266, 392], ['VOCAL CORDS', 356, 370, 300, 384], ['GLOTTIS', 350, 402, 288, 390]];
+const UVULA_I = TAGS.findIndex(t => t[0] === 'UVULA'), VELUM_I = TAGS.findIndex(t => t[0] === 'VELUM');
+const SVGNS = 'http://www.w3.org/2000/svg', leaders = document.createElementNS(SVGNS, 'svg'); leaders.id = 'leaders'; stage.appendChild(leaders);
+const tagEls = TAGS.map(([t]) => { const e = document.createElement('div'); e.className = 'tag'; e.textContent = t; e.style.display = 'none'; stage.appendChild(e); return e; });
+const tagLn = TAGS.map(t => { if (t.length < 5) return null; const l = document.createElementNS(SVGNS, 'line'), c = document.createElementNS(SVGNS, 'circle'); c.setAttribute('r', 2.1); leaders.append(l, c); return [l, c]; });
+let showTags = false, xray = false, cut = 0.01;
+
+/* ── 소리 목록 ── */
+const C = (sym, word, voiced, place, manner, o) => ({ sym, word, voiced, place, manner, kind: 'c', jaw: 0.1, ...o });
+const BLOCK = { bilabial: 0.885, labiodental: 0.86, interdental: 0.835, alveolar: 0.775, palatal: 0.675, velar: 0.405, glottal: 0.03 };
+const SOUNDS = [
+  C('p', 'pie', 0, 'bilabial', 'stop', { lips: 'closed', t: { rest: 1 }, jaw: 0.05 }), C('b', 'buy', 1, 'bilabial', 'stop', { lips: 'closed', t: { rest: 1 }, jaw: 0.05 }),
+  C('m', 'my', 1, 'bilabial', 'nasal', { lips: 'closed', t: { rest: 1 }, jaw: 0.05 }),
+  C('f', 'fine', 0, 'labiodental', 'fricative', { lips: 'labdent', t: { rest: 1 }, jaw: 0.02 }), C('v', 'vine', 1, 'labiodental', 'fricative', { lips: 'labdent', t: { rest: 1 }, jaw: 0.02 }),
+  C('θ', 'thigh', 0, 'interdental', 'fricative', { t: { dent: 1 }, jaw: 0.24 }), C('ð', 'thy', 1, 'interdental', 'fricative', { t: { dent: 1 }, jaw: 0.24 }),
+  C('t', 'tie', 0, 'alveolar', 'stop', { t: { alv: 1 }, jaw: 0.04 }), C('d', 'die', 1, 'alveolar', 'stop', { t: { alv: 1 }, jaw: 0.04 }), C('n', 'night', 1, 'alveolar', 'nasal', { t: { alv: 1 }, jaw: 0.04 }),
+  C('s', 'sue', 0, 'alveolar', 'fricative', { t: { alvfr: 1 }, jaw: 0.02, lips: 'spread' }), C('z', 'zoo', 1, 'alveolar', 'fricative', { t: { alvfr: 1 }, jaw: 0.02, lips: 'spread' }),
+  C('l', 'lye', 1, 'alveolar', 'liquid (lateral)', { t: { alv: 1 }, jaw: 0.08, note: 'The tip touches the ridge; air escapes over the sides of the tongue.' }),
+  C('r', 'rye', 1, 'alveolar', 'liquid', { t: { retro: 1 }, note: 'The tip curls back behind the ridge without touching it.' }),
+  C('ʃ', 'mission', 0, 'palatal', 'fricative', { t: { palfr: 1 }, jaw: 0.04 }), C('ʒ', 'measure', 1, 'palatal', 'fricative', { t: { palfr: 1 }, jaw: 0.04 }),
+  C('tʃ', 'cheap', 0, 'palatal', 'affricate', { t: { pal: 1 }, jaw: 0.04 }), C('dʒ', 'judge', 1, 'palatal', 'affricate', { t: { pal: 1 }, jaw: 0.04 }),
+  C('j', 'you', 1, 'palatal', 'glide', { t: { i: 1 }, lips: 'spread' }),
+  C('k', 'kick', 0, 'velar', 'stop', { t: { vel: 1 } }), C('g', 'gig', 1, 'velar', 'stop', { t: { vel: 1 } }), C('ŋ', 'bang', 1, 'velar', 'nasal', { t: { veln: 1 } }),
+  C('w', 'we', 1, 'velar', 'glide', { t: { u: 1 }, lips: 'round', place2: 'labio-velar', note: 'Two gestures at once: the back of the tongue rises toward the velum and the lips round.' }),
+  C('h', 'high', 0, 'glottal', 'fricative', { t: { rest: 1 }, jaw: 0.3, note: 'Air passes through the open glottis; the tongue and lips are already shaped for the next vowel.' }),
+  C('ʔ', 'uh-oh', 0, 'glottal', 'stop', { t: { rest: 1 }, jaw: 0.3, note: 'The vocal cords close tightly and stop the air at the glottis.' }),
+];
+const V = (sym, word, desc, t, lips, tense, jaw) => ({ sym, word, desc, t, lips, tense, jaw, kind: 'v', voiced: 1 });
+const VOWELS = [
+  V('i', 'beet', 'high front', { i: 1 }, 'spread', 1, 0.08), V('ɪ', 'bit', 'high front', { i: 0.7, rest: 0.3 }, 'spread', 0, 0.18),
+  V('e', 'bait', 'mid front', { i: 0.68, ae: 0.32 }, 'spread', 1, 0.34), V('ɛ', 'bet', 'mid front', { i: 0.5, ae: 0.5 }, 'open', 0, 0.5),
+  V('æ', 'bat', 'low front', { ae: 1 }, 'open', 0, 0.85),
+  V('ə', 'about', 'mid central', { rest: 1 }, 'open', 0, 0.36), V('ʌ', 'butt', 'central, lower than [ə]', { rest: 0.5, a: 0.5 }, 'open', 0, 0.55), V('ɑ', 'balm', 'low central', { a: 1 }, 'open', 1, 1),
+  V('u', 'boot', 'high back', { u: 1 }, 'round', 1, 0.1), V('ʊ', 'put', 'high back', { u: 0.7, rest: 0.3 }, 'round', 0, 0.2),
+  V('o', 'boat', 'mid back', { u: 0.5, rest: 0.3, a: 0.2 }, 'round', 1, 0.4), V('ɔ', 'bawd', 'low back', { u: 0.3, a: 0.7 }, 'round', 1, 0.75),
+];
+const ALL = [...SOUNDS, ...VOWELS];
+
+
+/* ── 상태·전환 ── */
+const MW = { open: 38, spread: 48, round: 15, closed: 38, labdent: 38 };
+const cur = { tongue: mix({ rest: 1 }, TNG), skin: nums(SKINS.open), velum: nums(VEL.up), jaw: 0.36, mw: 38, tg: [0, 0] };
+/* 혀 옆 모양: [옆 올림(가운데 홈·밀착), 옆 내림(설측)] */
+const TGOF = s => s.sym === 'l' ? [0, 12] : /^[sz]$/.test(s.sym) ? [5, 0] : /^(ʃ|ʒ|tʃ|dʒ)$/.test(s.sym) ? [3.5, 0] : /^[tdn]$/.test(s.sym) ? [2.5, 0] : s.sym === 'r' ? [2, 0] : /^[ijɪ]$/.test(s.sym) ? [1.5, 0] : [0, 0];
+let from = null, to = null, t0 = 0, sound = null, phase = 'hold', phaseT = 0;
+const DUR = 460, TIM = { tongue: 1, tg: 1, skin: 0.8, mw: 0.8, velum: 0.6, jaw: 1.15 };      // 기관별 소요 시간 비율: 연구개가 가장 빠르고 턱이 가장 느리다
+let tDur = DUR;
+function go(target, dur = DUR) { from = { tongue: [...cur.tongue], skin: [...cur.skin], velum: [...cur.velum], jaw: cur.jaw, mw: cur.mw, tg: [...cur.tg] }; to = target; tDur = dur; t0 = performance.now(); }
+function targetOf(s, released) {
+  if (released) return { tongue: mix({ rest: 1 }, TNG), skin: nums(SKINS.open), velum: nums(VEL.up), jaw: 0.36, mw: MW.open, tg: [0, 0] };
+  const k = s.lips || 'open';
+  return { tongue: mix(s.t, TNG), skin: nums(SKINS[k]), velum: nums(s.manner === 'nasal' ? VEL.down : VEL.up), jaw: s.jaw, mw: MW[k], tg: TGOF(s) };
+}
+function applyShapes() {
+  const j = cur.jaw, skinN = rot(cur.skin, j, wSkin);
+  buildHead(skinN, j, cur.mw); placeEyes(); lipCap(skinN, j);
+  buildTongue(rot(cur.tongue, j, () => 0.85), cur.tg); reshape(P.velum, cur.velum);
+  capVelum.geometry.dispose(); capVelum.geometry = new THREE.ShapeGeometry(shapeFrom(P.velum.userData.tpl, cur.velum), 16);
+  jawG.rotation.z = j * JAW_MAX;
+  paintB.geometry.dispose(); paintB.geometry = new THREE.ShapeGeometry(shapeFrom(AIRB_TPL, rot(AIRB_N, j, wAirB)), 16);
+}
+const DBG = { hold: null };      // 점검용: 막고 있는 시간(ms)을 바꿔 본다
+let quiz = null;      // Practice 모드의 현재 문제: { level, target, options, done }
+const $ = id => document.getElementById(id);
+const descOf = s => s.kind === 'c'
+  ? `${s.voiced ? 'voiced' : 'voiceless'} ${s.place2 || s.place} ${s.manner === 'nasal' ? 'nasal stop' : s.manner}`
+  : `${s.desc} · ${s.lips === 'round' ? 'rounded' : 'unrounded'} · ${s.tense ? 'tense' : 'lax'}`;
+const noteOf = s => s.note || (s.kind === 'v' ? 'The tongue shapes the open tract; no obstruction of the airstream.'
+  : s.manner === 'stop' ? (s.sym === 'ʔ' ? 'The airstream is completely blocked, then released.' : s.voiced ? 'The airstream is completely blocked, then released; the vocal cords vibrate throughout the closure.' : 'The airstream is completely blocked and pressure builds up; the release lets out a puff of air.')
+  : s.manner === 'nasal' ? 'A stop made with the velum lowered: the mouth is blocked while air escapes through the nose, then the closure is released.'
+  : s.manner === 'fricative' ? 'A narrow opening: the air is obstructed enough to cause friction.'
+  : s.manner === 'affricate' ? 'A stop closure followed by a gradual, fricative-like release.' : 'The articulators come close, with little obstruction.');
+function showInfo(s) {
+  document.querySelectorAll('.key').forEach(k => k.classList.toggle('on', k.dataset.sym === s.sym));
+  $('sym').textContent = s.sym; $('word').textContent = s.word; $('desc').textContent = descOf(s); $('note').textContent = noteOf(s);
+}
+function maskInfo() {
+  document.querySelectorAll('.key').forEach(k => k.classList.remove('on'));
+  $('sym').textContent = '?'; $('word').textContent = ''; $('desc').textContent = 'Which sound is this?'; $('note').textContent = 'Watch the lips, the tongue, the velum and the vocal cords. Replay as often as you like.';
+}
+function select(s) {
+  sound = s; phase = 'hold'; phaseT = performance.now(); go(targetOf(s, false));
+  dots.forEach((d, i) => { d.userData.u = i / NP; d.userData.b = 0; d.userData.wait = 0; }); burstT = 0; puffs.forEach(m => { m.visible = false; });
+  if (quiz && !quiz.done) maskInfo(); else showInfo(s);
+  $('say').hidden = !!(quiz && !quiz.done);      // 문제를 푸는 중에는 단어 듣기를 숨긴다(답이 드러난다)
+  $('voiceLab').textContent = s.sym === 'ʔ' ? 'CLOSED' : s.voiced ? 'VOICED · VIBRATING' : 'VOICELESS · APART';
+}
+const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+
+/* ── UI ── */
+const PLACES = ['bilabial', 'labiodental', 'interdental', 'alveolar', 'palatal', 'velar', 'glottal'];
+const consEl = document.getElementById('cons');
+for (const p of PLACES) {
+  const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="pl">${p}</span><span class="keys"></span>`;
+  for (const s of SOUNDS.filter(x => x.place === p)) row.lastChild.appendChild(key(s)); consEl.appendChild(row);
+}
+const vowEl = document.getElementById('vows');
+for (const [lab, set] of [['front', ['i', 'ɪ', 'e', 'ɛ', 'æ']], ['central', ['ə', 'ʌ', 'ɑ']], ['back', ['u', 'ʊ', 'o', 'ɔ']]]) {
+  const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="pl">${lab}</span><span class="keys"></span>`;
+  for (const sym of set) row.lastChild.appendChild(key(VOWELS.find(v => v.sym === sym))); vowEl.appendChild(row);
+}
+function key(s) { const b = document.createElement('button'); b.className = 'key'; b.dataset.sym = s.sym; b.textContent = s.sym; b.onclick = () => select(s); return b; }
+document.getElementById('replay').onclick = () => sound && select(sound);
+document.getElementById('say').onclick = () => { if (!sound || !window.speechSynthesis || (quiz && !quiz.done)) return;      // 문제를 푸는 중에는 단어를 들려주지 않는다(답이 드러난다)
+  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(sound.word); u.lang = 'en-US'; u.rate = 0.85; speechSynthesis.speak(u); };
+document.getElementById('tags').onclick = e => { showTags = !showTags; e.currentTarget.classList.toggle('on', showTags); e.currentTarget.setAttribute('aria-pressed', showTags); tagEls.forEach(el => el.style.display = showTags ? 'block' : 'none'); leaders.style.display = showTags ? 'block' : 'none'; };
+document.getElementById('xray').onclick = e => { xray = !xray; e.currentTarget.classList.toggle('on', xray); e.currentTarget.setAttribute('aria-pressed', xray); };
+const cutEl = document.getElementById('cut'); const setCut = () => { cut = Math.max(0.01, 205 * (1 - cutEl.value / 100)); }; cutEl.oninput = setCut; setCut();
+/* ── Practice: 무슨 소리일까 ── 기호·설명을 가린 채 조음을 보여 주고 보기 넷 중에서 고른다. 기록은 남기지 않는다 */
+const QLV = [
+  ['place', 'Place', 'The four choices differ in place of articulation. Find where the airstream is obstructed.'],
+  ['manner', 'Manner', 'Same place, different manner. Is the air stopped, squeezed through a narrow gap, sent through the nose, or let past the tongue?'],
+  ['voicing', 'Voicing', 'Some choices differ only in voicing. Check the vocal cords.'],
+  ['vowels', 'Vowels', 'Compare how high the tongue is, which part is raised, and whether the lips are rounded.'],
+  ['mixed', 'Mixed', 'Any of the levels above.'],
+];
+const VPAIRS = [['p', 'b'], ['f', 'v'], ['θ', 'ð'], ['t', 'd'], ['s', 'z'], ['ʃ', 'ʒ'], ['tʃ', 'dʒ'], ['k', 'g']];
+const rnd = a => a[Math.floor(Math.random() * a.length)], shuf = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const bySym = y => ALL.find(s => s.sym === y);
+function makeQuestion(level, avoid) {
+  if (level === 'mixed') level = rnd(['place', 'manner', 'voicing', 'vowels']);
+  let opts;
+  for (let tries = 0; tries < 30; tries++) {
+    if (level === 'place') { opts = []; for (const s of shuf(SOUNDS)) if (!opts.some(o => o.place === s.place) && opts.length < 4) opts.push(s); }      // 위치가 서로 다른 네 소리
+    else if (level === 'manner') { const pl = rnd(['alveolar', 'alveolar', 'palatal', 'velar']), pool = shuf(SOUNDS.filter(s => s.place === pl)); opts = []; for (const s of pool) if (!opts.some(o => o.manner === s.manner)) opts.push(s); for (const s of pool) if (opts.length < 4 && !opts.includes(s)) opts.push(s); opts = opts.slice(0, 4); }      // 같은 위치, 다른 방법
+    else if (level === 'voicing') opts = shuf(VPAIRS).slice(0, 2).flat().map(bySym);      // 유무성만 다른 두 쌍
+    else opts = shuf(VOWELS).slice(0, 4);
+    if (opts.length === 4 && new Set(opts.map(o => o.sym)).size === 4) { const target = rnd(opts.filter(o => o.sym !== avoid)); return { level, target, options: shuf(opts), done: false }; }
+  }
+  return { level, target: opts[0], options: opts, done: false };
+}
+/* 게임 요소. 방식은 셋: Classic(10문제) · Time attack(60초) · Survival(목숨 3개, 갈수록 어려워진다).
+   정답은 100점 + 속도 보너스(12초 안에서 빨리 답할수록 최대 50점)에 연속 정답 배수(최대 2배)를 곱한다.
+   점수(XP)가 쌓이면 랭크가 오르고 꾸미기가 풀린다. 진행 상황은 서버에 남기지 않고 이 브라우저에만 저장한다(localStorage) */
+const ROUND = 10, T_BONUS = 12000, T_ATTACK = 60000, SAVE_KEY = 'v3d-save-1';
+const MODES = [['classic', 'Classic', 'Ten sounds. Speed and streaks raise the score.'], ['time', 'Time attack', 'Sixty seconds. A wrong answer costs three seconds.'], ['survival', 'Survival', 'Three lives. The sounds get harder as you go.']];
+const RANKS = [[0, 'Listener', ''], [800, 'Lip Reader', 'two more hoodie colours'], [2500, 'Tongue Tracker', 'two more hair colours'], [5000, 'Articulator', 'headphones'], [9000, 'Phonetician', ''], [15000, 'IPA Master', 'the graduation cap']];
+const BADGES = [['first', 'First round', 'Finish any round.'], ['five', 'Five in a row', 'Five correct answers in a row.'], ['quick', 'Quick draw', 'A correct answer within two seconds.'], ['perfect', 'Perfect ten', 'Ten out of ten in Classic.'],
+  ['voice', 'Voice detective', 'Eight or more in a Voicing round.'], ['vowel', 'Vowel explorer', 'Eight or more in a Vowels round.'], ['sixty', 'Sixty seconds', 'Ten or more in Time attack.'], ['survivor', 'Survivor', 'Reach fifteen sounds in Survival.']];
+const blank = () => ({ xp: 0, best: {}, badges: [], look: [0, 0, 0] });
+const save = (() => { try { return Object.assign(blank(), JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) { return blank(); } })();
+const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
+const rankOf = xp => { let r = 0; while (r < RANKS.length - 1 && xp >= RANKS[r + 1][0]) r++; return r; };
+const NEED = { hair: [0, 0, 0, 2, 2], hood: [0, 0, 0, 1, 1], acc: [0, 0, 3, 5] };      // 항목마다 풀리는 랭크. 머리색·후드색 세 가지씩과 안경은 처음부터 고를 수 있다
+const qs = { mode: 'classic', level: 'place', count: 0, right: 0, score: 0, shown: 0, streak: 0, bestStreak: 0, results: [], t0: 0, over: false, lives: 3, tEnd: 0, tick: 0, auto: 0, newBadges: [] };
+const bestKey = () => qs.mode + (qs.mode === 'survival' ? '' : ':' + qs.level), multOf = st => 1 + 0.25 * Math.min(4, Math.max(0, st - 1));
+const levelNow = () => qs.mode !== 'survival' ? qs.level : qs.count < 4 ? 'place' : qs.count < 8 ? 'manner' : qs.count < 12 ? 'voicing' : qs.count < 16 ? 'vowels' : 'mixed';
+/* 효과음: 파일 없이 Web Audio로 짧은 음을 합성한다 */
+let actx = null, sfxOn = true;
+function tone(f, t, dur, type = 'triangle', vol = 0.12, slide) { const o = actx.createOscillator(), g = actx.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.03); }
+function sfx(name) {
+  if (!sfxOn) return;
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); const t = actx.currentTime + 0.01;
+    if (name === 'ok') { tone(659.3, t, 0.16); tone(987.8, t + 0.1, 0.3); }
+    else if (name === 'combo') [659.3, 784, 987.8, 1318.5].forEach((f, i) => tone(f, t + i * 0.075, 0.24));
+    else if (name === 'no') { tone(233.1, t, 0.2, 'sine', 0.14, 174.6); tone(155.6, t + 0.16, 0.3, 'sine', 0.12, 116.5); }
+    else if (name === 'next') tone(523.3, t, 0.07, 'sine', 0.06);
+    else if (name === 'tick') tone(1046.5, t, 0.05, 'sine', 0.07);
+    else if (name === 'unlock') [784, 1046.5, 1318.5, 1568].forEach((f, i) => tone(f, t + i * 0.09, 0.3, 'sine', 0.1));
+    else if (name === 'win') [523.3, 659.3, 784, 1046.5, 784, 1046.5].forEach((f, i) => tone(f, t + i * 0.12, i === 5 ? 0.6 : 0.2, 'triangle', 0.13));
+    else if (name === 'end') [523.3, 587.3, 659.3].forEach((f, i) => tone(f, t + i * 0.14, 0.32, 'triangle', 0.1));
+  } catch (e) {}
+}
+/* 캐릭터 반응: 맞히면 통통 뛰며 끄덕이고 눈의 반짝임이 커진다. 틀리면 좌우로 살짝 흔들린다(잘린 면이 어긋나지 않게 z는 건드리지 않는다) */
+let react = null, joyUntil = 0, bubbleT = 0;
+function reactTo(ok, long) { react = { ok, t0: performance.now() }; if (ok) joyUntil = performance.now() + (long ? 3200 : 1500); }
+function stepReact(now) {
+  JOY.value += ((now < joyUntil ? 1 : 0) - JOY.value) * 0.18; if (JOY.value < 0.002) JOY.value = 0;
+  if (!react) return;
+  const k = (now - react.t0) / (react.ok ? 950 : 560);
+  if (k >= 1) { head.position.set(0, 0, 0); head.rotation.z = 0; react = null; }
+  else if (react.ok) { head.position.y = 15 * Math.abs(Math.sin(k * Math.PI * 2)) * (1 - k); head.rotation.z = -0.05 * Math.sin(k * Math.PI * 4) * (1 - k); }
+  else head.position.x = 8 * Math.sin(k * Math.PI * 6) * (1 - k);
+}
+const SAY = { ok: ['Nice!', 'You got it!', 'Spot on!', 'Exactly!', 'Sharp eyes!'], combo: ['On a roll!', 'Keep going!', 'Unstoppable!'], no: ['So close!', 'Watch it again.', 'Not this time.', 'Look at the lips again.'], life: ['One life left!'], win: ['What a round!', 'Brilliant!'], end: ['Good practice!', 'Again?'], unlock: ['A new look!'] };
+function mouthAt() {      // 정면 인셋 안에서 본 입꼬리(화면 오른쪽)의 자리: 인셋 왼쪽 위 기준 px
+  const a = LIPU.uLipA.value, c = W(cur.skin[36], a.x, 0).project(frontCam), e = W(cur.skin[36], a.x, a.z).project(frontCam);
+  return [((c.x + Math.abs(e.x - c.x)) * 0.5 + 0.5) * INS_W, (0.5 - c.y * 0.5) * INS_H, (c.x * 0.5 + 0.5) * INS_W];      // 입꼬리 x, 입 높이 y, 입 가운데 x
+}
+let talk = null;      // 말하는 동안 인셋의 입을 움직인다: { t0, dur, n(음절 수) }
+function say(kind) {      // 말풍선: 종류에 따라 모양이 다르다(ok 녹색 테두리+체크 · combo/win/unlock 녹색 채움+반짝임 · life 느낌표 · no/end 기본)
+  const b = $('bubble'), text = rnd(SAY[kind]), fr = frontEl, sw = stage.clientWidth, sh = stage.clientHeight, [mx, my, mc] = mouthAt(), tl = Math.round(INS_W * 0.2);
+  const inBox = !$('gResult').hidden && INS_W >= 180;      // 결과 화면: 옆으로 내면 결과 카드의 버튼을 가리므로 인셋 안 턱 아래에 띄운다(인셋이 작은 휴대폰에서는 옆으로)
+  const left = Math.round(fr.offsetLeft + 1 + mx + INS_W * 0.03 + tl - 2.5);      // 꼬리 끝은 입꼬리 바로 옆, 풍선 몸통은 얼굴을 가리지 않는 만큼 떨어뜨린다
+  $('bubbleT').textContent = text; b.className = 'bubble k-' + kind + (inBox ? ' dn' : ''); b.style.setProperty('--tl', tl + 'px'); b.style.left = left + 'px'; b.style.maxWidth = (inBox ? INS_W - 12 : Math.min(sw < 600 ? 210 : 250, sw - left - 8)) + 'px';
+  if (inBox) { const bw = b.offsetWidth, tipX = fr.offsetLeft + 1 + mc + (mx - mc) * 0.35, tipY = fr.offsetTop + 1 + my + INS_H * 0.04, l = Math.round(Math.max(fr.offsetLeft + 6, Math.min(fr.offsetLeft + fr.offsetWidth - bw - 6, tipX - bw * 0.32)));
+    b.style.left = l + 'px'; b.style.setProperty('--tx', Math.max(14, Math.min(bw - 32, tipX - l - 7)) + 'px'); b.style.bottom = Math.round(sh - (tipY + 26.3) - b.offsetHeight) + 'px'; }
+  else b.style.bottom = Math.round(sh - (fr.offsetTop + 1 + my) - (b.offsetHeight / 2 - 8)) + 'px';
+  void b.offsetWidth; b.classList.add('on'); clearTimeout(bubbleT); bubbleT = setTimeout(() => { b.classList.remove('on'); b.classList.add('off'); }, Math.max(1700, 900 + 55 * text.length));
+  const n = Math.max(2, Math.min(5, Math.round(text.length / 5))); talk = matchMedia('(prefers-reduced-motion: reduce)').matches ? null : { t0: performance.now() + 130, dur: n * 185, n };
+}
+
+function confetti() { const cols = [getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#24513f', '#1c1a17', '#9dbde6', '#f2a48f', '#d9b24a', '#8a5c3c']; for (let i = 0; i < 46; i++) { const c = document.createElement('i'); c.className = 'conf'; c.style.left = Math.random() * 100 + '%'; c.style.background = cols[i % cols.length]; c.style.animationDuration = 1.6 + Math.random() * 1.4 + 's'; c.style.animationDelay = Math.random() * 0.5 + 's'; stage.appendChild(c); setTimeout(() => c.remove(), 3700); } }
+function earn(id) { if (!save.badges.includes(id)) { save.badges.push(id); qs.newBadges.push(id); persist(); } }
+/* 보상 칸: 랭크, 다음 랭크까지, 꾸미기, 배지 */
+function renderRewards() {
+  const r = rankOf(save.xp), nx = RANKS[r + 1];
+  $('qRank').textContent = RANKS[r][1]; $('gRankT').textContent = RANKS[r][1]; $('qXp').style.width = (nx ? 100 * (save.xp - RANKS[r][0]) / (nx[0] - RANKS[r][0]) : 100) + '%';
+  $('qXpTxt').textContent = nx ? `${save.xp.toLocaleString('en-US')} XP · ${(nx[0] - save.xp).toLocaleString('en-US')} to ${nx[1]}${nx[2] ? ` (unlocks ${nx[2]})` : ''}` : `${save.xp.toLocaleString('en-US')} XP · top rank`;
+  const sw = (box, list, slot, need) => { box.innerHTML = ''; list.forEach((c, i) => { const b = document.createElement('button'); b.className = 'sw' + (save.look[slot] === i ? ' on' : ''); b.style.background = '#' + c[0].toString(16).padStart(6, '0'); b.disabled = r < need[i]; b.title = b.disabled ? `Unlocks at ${RANKS[need[i]][1]}` : ''; b.onclick = () => { save.look[slot] = i; persist(); applyLook(save.look); renderRewards(); }; box.appendChild(b); }); };
+  sw($('swHair'), HAIRS, 0, NEED.hair); sw($('swHood'), HOODS, 1, NEED.hood);
+  const ab = $('swAcc'); ab.innerHTML = ''; ['None', 'Glasses', 'Headphones', 'Cap'].forEach((n, i) => { const b = document.createElement('button'); b.className = 'btn' + (save.look[2] === i ? ' on' : ''); b.textContent = n; b.disabled = r < NEED.acc[i]; b.title = b.disabled ? `Unlocks at ${RANKS[NEED.acc[i]][1]}` : ''; b.onclick = () => { save.look[2] = i; persist(); applyLook(save.look); renderRewards(); }; ab.appendChild(b); });
+  const bb = $('qBadges'); bb.innerHTML = ''; for (const [id, name, how] of BADGES) { const d = document.createElement('div'); d.className = 'qbadge' + (save.badges.includes(id) ? ' got' : ''); d.innerHTML = '<img alt=""><div><b></b><span></span></div>'; d.firstChild.src = `assets/badges/${id}.webp`; d.lastChild.firstChild.textContent = name; d.lastChild.lastChild.textContent = how; bb.appendChild(d); }
+}
+const chipText = () => MODES.find(m => m[0] === qs.mode)[1] + (qs.mode === 'survival' ? '' : ' · ' + QLV.find(l => l[0] === qs.level)[1]);
+function stat() {
+  $('qStat').textContent = qs.over || !quiz ? '' : qs.mode === 'classic' ? `Sound ${Math.min(ROUND, qs.results.length + (quiz.done ? 0 : 1))} of ${ROUND}` : qs.mode === 'time' ? `${Math.max(0, Math.ceil((qs.tEnd - performance.now()) / 1000))} s left · ${qs.right} correct` : `Sound ${qs.count + (quiz.done ? 0 : 1)} · level ${QLV.find(l => l[0] === levelNow())[1]}`;
+}
+function hud(pop) {
+  const from = qs.shown, to = qs.score, t0 = performance.now(), el = $('qPts');
+  const tick = now => { const k = Math.min(1, (now - t0) / 500); qs.shown = Math.round(from + (to - from) * k); el.textContent = qs.shown.toLocaleString('en-US'); if (k < 1) requestAnimationFrame(tick); };
+  if (from !== to) requestAnimationFrame(tick); else el.textContent = to.toLocaleString('en-US');
+  if (pop) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+  $('qStreak').textContent = qs.streak; $('qMult').textContent = qs.streak > 1 ? '×' + multOf(qs.streak + 1).toFixed(2).replace(/0$/, '') + ' NEXT' : '';
+  const b = save.best[bestKey()]; $('qBest').textContent = b ? b.toLocaleString('en-US') : '–'; $('gSetupT').textContent = chipText();
+  const pips = $('qPips'); pips.innerHTML = ''; pips.className = 'qpips' + (qs.mode === 'survival' ? ' lives' : qs.mode === 'time' ? ' none' : '');
+  if (qs.mode === 'classic') for (let i = 0; i < ROUND; i++) { const p = document.createElement('i'); p.className = i < qs.results.length ? (qs.results[i] ? 'ok' : 'no') : i === qs.results.length && !qs.over && quiz ? 'cur' : ''; pips.appendChild(p); }
+  else if (qs.mode === 'survival') for (let i = 0; i < 3; i++) { const p = document.createElement('i'); p.className = i < qs.lives ? 'ok' : 'no'; pips.appendChild(p); }
+  stat();
+}
+function timerStart() { if (qs.mode === 'time') return; const t = $('qTime'); t.style.transition = 'none'; t.style.transform = 'scaleX(1)'; void t.offsetWidth; t.style.transition = `transform ${T_BONUS}ms linear`; t.style.transform = 'scaleX(0)'; }
+function timerStop() { const k = Math.max(0, 1 - (performance.now() - qs.t0) / T_BONUS); if (qs.mode !== 'time') { const t = $('qTime'); t.style.transition = 'none'; t.style.transform = `scaleX(${k})`; } return k; }
+const nextLabel = t => { $('qNext').innerHTML = ''; $('qNext').append(t, ' '); const k = document.createElement('kbd'); k.textContent = 'Enter'; $('qNext').appendChild(k); };
+/* 화면 조각을 보이고 숨긴다: 시작 카드 · 답 고르기 칸 · 결과 카드. 모형 영역의 크기가 바뀌므로 캔버스를 다시 맞춘다 */
+let fitW = 0, fitH = 0;
+function show(part) { $('gLobby').hidden = part !== 'lobby'; $('gResult').hidden = part !== 'result'; $('dock').hidden = part !== 'play'; resize();
+  if (stage.clientWidth !== fitW || stage.clientHeight !== fitH) { fitW = stage.clientWidth; fitH = stage.clientHeight; setView(lastView, true); } }      // 모형 영역 크기가 바뀌었으면 화면에 다시 맞춘다
+function lobbyMarks() {
+  document.querySelectorAll('#qModes .gmode').forEach(b => b.classList.toggle('on', b.dataset.md === qs.mode));
+  document.querySelectorAll('#qLevels .btn').forEach(b => { b.classList.toggle('on', b.dataset.lv === qs.level && qs.mode !== 'survival'); b.disabled = qs.mode === 'survival'; });
+  $('qHelp').textContent = qs.mode === 'survival' ? 'Survival sets the level for you: Place, then Manner, Voicing, Vowels and Mixed.' : QLV.find(l => l[0] === qs.level)[2];
+}
+function openLobby() {      // 시작 카드: 게임 방식과 단계를 고른다. 진행 중이던 판은 버린다
+  clearInterval(qs.tick); clearTimeout(qs.auto); const open = quiz && !quiz.done; quiz = null;
+  Object.assign(qs, { count: 0, right: 0, score: 0, shown: 0, streak: 0, bestStreak: 0, results: [], over: false, lives: 3, newBadges: [] });
+  $('qTime').style.transition = 'none'; $('qTime').style.transform = 'scaleX(0)'; lobbyMarks(); hud(); show('lobby'); if (open || sound !== VOWELS[5]) select(VOWELS[5]);
+}
+function renderQuiz() {
+  const box = $('qOpts'); box.innerHTML = '';
+  quiz.options.forEach((o, i) => { const b = document.createElement('button'); b.className = 'qopt'; b.dataset.sym = o.sym; b.innerHTML = `<span class="n">${i + 1}</span><span class="s"></span><span class="w"></span>`; b.children[1].textContent = o.sym; b.children[2].textContent = o.word; b.onclick = () => answer(o); box.appendChild(b); });
+  const fb = $('qFb'); fb.innerHTML = '<b></b><span></span>'; fb.firstChild.textContent = 'WHICH SOUND IS THIS?'; fb.lastChild.textContent = QLV.find(l => l[0] === levelNow())[2];
+  nextLabel('Skip'); hud();
+}
+function startRound() {
+  clearInterval(qs.tick); clearTimeout(qs.auto);
+  Object.assign(qs, { count: 0, right: 0, score: 0, shown: 0, streak: 0, bestStreak: 0, results: [], over: false, lives: 3, newBadges: [] }); quiz = null; show('play');
+  if (qs.mode === 'time') { qs.tEnd = performance.now() + T_ATTACK; let lastS = 99; const bar = $('qTime'); bar.style.transition = 'none';
+    qs.tick = setInterval(() => { const left = qs.tEnd - performance.now(); bar.style.transform = `scaleX(${Math.max(0, left / T_ATTACK)})`; const sec = Math.ceil(left / 1000); if (sec !== lastS) { lastS = sec; stat(); if (sec <= 5 && sec > 0) sfx('tick'); } if (left <= 0) endRound(); }, 100); }
+  newQuestion();
+}
+function newQuestion() { quiz = makeQuestion(levelNow(), quiz && quiz.target.sym); renderQuiz(); select(quiz.target); qs.t0 = performance.now(); timerStart(); }
+const roundDone = () => qs.mode === 'classic' ? qs.results.length >= ROUND : qs.mode === 'survival' ? qs.lives <= 0 : performance.now() >= qs.tEnd;
+function nextQuestion() {
+  clearTimeout(qs.auto);
+  if (!$('gLobby').hidden || qs.over) { sfx('next'); return startRound(); }
+  if (quiz && !quiz.done) { quiz.done = true; qs.streak = 0; timerStop(); qs.count++; qs.results.push(false); if (qs.mode === 'survival') qs.lives--; }      // 건너뛰기: 틀린 것으로 센다
+  if (roundDone()) return endRound();
+  sfx('next'); newQuestion();
+}
+function answer(o) {
+  if (!quiz || quiz.done || qs.over) return;
+  quiz.done = true; const ok = o === quiz.target, t = quiz.target, took = performance.now() - qs.t0, speed = timerStop(); let gain = 0;
+  qs.count++; qs.results.push(ok);
+  if (ok) { qs.streak++; qs.right++; qs.bestStreak = Math.max(qs.bestStreak, qs.streak); gain = Math.round((100 + (qs.mode === 'time' ? 0 : 50 * speed)) * multOf(qs.streak) / 5) * 5; qs.score += gain; if (qs.streak >= 5) earn('five'); if (took < 2000) earn('quick'); }
+  else { qs.streak = 0; if (qs.mode === 'survival') qs.lives--; if (qs.mode === 'time') qs.tEnd -= 3000; }
+  document.querySelectorAll('#qOpts .qopt').forEach(b => { b.disabled = true; const isT = b.dataset.sym === t.sym, isC = b.dataset.sym === o.sym; b.classList.toggle('ok', isT && ok); b.classList.toggle('ans', isT && !ok); b.classList.toggle('no', isC && !isT); b.classList.toggle('dim', !isT && !isC); if (isT) b.firstChild.textContent = isC ? 'CORRECT' : 'THE ANSWER'; else if (isC) b.firstChild.textContent = 'YOUR CHOICE';
+    if (isT && ok) for (let i = 0; i < 10; i++) { const sp = document.createElement('i'), an = Math.PI * 2 * i / 10 + Math.random() * 0.5, r = 34 + Math.random() * 26; sp.className = 'qspark'; sp.style.setProperty('--dx', Math.cos(an) * r + 'px'); sp.style.setProperty('--dy', Math.sin(an) * r * 0.8 + 'px'); sp.style.background = ['var(--accent)', 'var(--ink)', 'var(--muted)'][i % 3]; b.appendChild(sp); setTimeout(() => sp.remove(), 750); } });
+  const praise = qs.streak >= 5 ? 'ON FIRE · ' + qs.streak + ' IN A ROW' : qs.streak >= 3 ? qs.streak + ' IN A ROW' : took < 3000 ? 'QUICK AND CORRECT' : 'CORRECT';
+  const fb = $('qFb'); fb.innerHTML = '<b></b><span></span>'; fb.firstChild.textContent = (ok ? praise : qs.mode === 'time' ? 'NOT QUITE · MINUS 3 SECONDS' : qs.mode === 'survival' ? `NOT QUITE · ${qs.lives} ${qs.lives === 1 ? 'LIFE' : 'LIVES'} LEFT` : 'NOT QUITE') + (ok ? ' · +' + gain : '');
+  fb.lastChild.textContent = `[${t.sym}] as in ${t.word}: ${descOf(t)}. ` + (ok ? noteOf(t) : `You chose [${o.sym}]: ${descOf(o)}.`);
+  if (ok) { const p = $('qPlus'); p.textContent = '+' + gain; p.classList.remove('go'); void p.offsetWidth; p.classList.add('go'); }
+  sfx(ok ? (qs.streak >= 3 ? 'combo' : 'ok') : 'no'); reactTo(ok); say(ok ? (qs.streak >= 3 ? 'combo' : 'ok') : qs.mode === 'survival' && qs.lives === 1 ? 'life' : 'no');
+  nextLabel(roundDone() ? 'See the result' : 'Next sound'); hud(ok);
+  select(t);      // 답을 보여 주면서 조음을 한 번 더 보여 준다(quiz.done이라 정보가 드러난다)
+  if (qs.mode === 'time') qs.auto = setTimeout(nextQuestion, 1100);      // 타임어택은 멈추지 않고 다음 소리로 넘어간다
+}
+function endRound() {
+  if (qs.over) return; qs.over = true; clearInterval(qs.tick); clearTimeout(qs.auto);
+  const key = bestKey(), isBest = qs.score > (save.best[key] || 0), r0 = rankOf(save.xp); if (isBest) save.best[key] = qs.score;
+  earn('first'); if (qs.mode === 'classic' && qs.right === ROUND) earn('perfect'); if (qs.mode === 'classic' && qs.right >= 8 && qs.level === 'voicing') earn('voice'); if (qs.mode === 'classic' && qs.right >= 8 && qs.level === 'vowels') earn('vowel');
+  if (qs.mode === 'time' && qs.right >= 10) earn('sixty'); if (qs.mode === 'survival' && qs.count >= 15) earn('survivor');
+  save.xp += qs.score; persist(); const r1 = rankOf(save.xp), up = r1 > r0;
+  /* 성적 구간(1 가장 좋음 – 4): 결과 그림과 연출을 고른다 */
+  const tier = qs.mode === 'classic' ? (qs.right === ROUND ? 1 : qs.right >= 8 ? 2 : qs.right >= 5 ? 3 : 4) : qs.mode === 'time' ? (qs.right >= 14 ? 1 : qs.right >= 10 ? 2 : qs.right >= 6 ? 3 : 4) : (qs.count >= 18 ? 1 : qs.count >= 12 ? 2 : qs.count >= 7 ? 3 : 4), good = tier <= 2;
+  const title = qs.mode === 'time' ? `${qs.right} sounds in sixty seconds` : qs.mode === 'survival' ? `You lasted ${qs.count} sounds` : qs.right === ROUND ? 'A perfect round' : qs.right >= 8 ? 'Sharp eyes' : qs.right >= 5 ? 'Getting there' : 'A warm-up round';
+  const box = $('gResult'); box.innerHTML = '<div class="qend"><img class="qpic" alt=""><div class="k"></div><h2></h2><p></p><p></p><p></p></div><div class="gact"></div>'; const e = box.firstChild.children;
+  e[0].src = `assets/results/tier${tier}.webp`; e[0].alt = ['The whole class cheers', 'High-fives all round', 'Keep going', 'Warming up'][tier - 1];
+  e[1].textContent = chipText().toUpperCase() + ' · ROUND COMPLETE' + (isBest && qs.score ? ' · NEW BEST' : '');
+  e[2].textContent = title; e[3].textContent = `${qs.right} of ${qs.count} correct · ${qs.score.toLocaleString('en-US')} points · longest streak ${qs.bestStreak}.`;
+  e[4].textContent = up ? `Rank up: you are now ${/^[AEIOU]/.test(RANKS[r1][1]) ? 'an' : 'a'} ${RANKS[r1][1]}.${RANKS[r1][2] ? ` Unlocked: ${RANKS[r1][2]}.` : ''}` : RANKS[r1 + 1] ? `+${qs.score.toLocaleString('en-US')} XP. ${(RANKS[r1 + 1][0] - save.xp).toLocaleString('en-US')} more to ${RANKS[r1 + 1][1]}.` : `+${qs.score.toLocaleString('en-US')} XP.`;
+  e[5].textContent = qs.newBadges.length ? (qs.newBadges.length > 1 ? 'New badges:' : 'New badge:') : '';
+  if (qs.newBadges.length) { const row = document.createElement('div'); row.className = 'qnew'; for (const id of qs.newBadges) { const f = document.createElement('figure'), im = document.createElement('img'), nm = BADGES.find(b => b[0] === id)[1]; im.src = `assets/badges/${id}.webp`; im.alt = nm; f.append(im, nm); row.appendChild(f); } box.firstChild.appendChild(row); }
+  const act = box.lastChild, mk = (label, cls, fn, key) => { const b = document.createElement('button'); b.className = 'btn big' + cls; b.textContent = label; if (key) { const k = document.createElement('kbd'); k.textContent = key; b.append(' ', k); } b.onclick = fn; act.appendChild(b); };
+  mk('Play again', ' primary', () => { sfx('next'); startRound(); }, 'Enter'); mk('Change game', '', openLobby); mk(up && RANKS[r1][2] ? 'Try the new look' : 'Rewards', '', () => { $('qRew').hidden = false; });
+  $('qTime').style.transition = 'none'; $('qTime').style.transform = 'scaleX(0)'; hud(); renderRewards(); show('result');
+  select(VOWELS[5]);      // 모형은 기본 자세로 돌아간다
+  sfx(up ? 'unlock' : good ? 'win' : 'end'); if (good || up) { reactTo(true, true); confetti(); } say(up && RANKS[r1][2] ? 'unlock' : good || up ? 'win' : 'end');
+}
+function setMode(m) {
+  const practice = m === 'practice'; document.querySelectorAll('.mode .btn').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  $('wrap').classList.toggle('game', practice); $('ghud').hidden = $('gtools').hidden = !practice;
+  const mb = document.querySelector('.modebar'); if (practice) $('ghud').insertBefore(mb, $('ghud').querySelector('.qtimer')); else $('wrap').appendChild(mb);      // 모드 전환 버튼: Practice에서는 위쪽 띠의 줄 안에 넣어 다른 버튼과 높이를 맞춘다
+  (practice ? $('gtools') : $('toolsHome')).appendChild($('tools'));      // 보기 도구 묶음을 화면에 맞는 자리로 옮긴다
+  if (practice) openLobby(); else { clearInterval(qs.tick); clearTimeout(qs.auto); quiz = null; $('qRew').hidden = true; show('none'); $('say').hidden = false; select(VOWELS[5]); }      // 풀던 문제의 답이 모드 전환으로 드러나지 않게 기본 소리로 돌아간다
+}
+for (const [id, label] of QLV) { const b = document.createElement('button'); b.className = 'btn'; b.dataset.lv = id; b.textContent = label; b.onclick = () => { qs.level = id; lobbyMarks(); hud(); }; $('qLevels').appendChild(b); }
+for (const [id, label, how] of MODES) { const b = document.createElement('button'); b.className = 'gmode'; b.dataset.md = id; b.innerHTML = '<b></b><span></span>'; b.firstChild.textContent = label; b.lastChild.textContent = how; b.onclick = () => { qs.mode = id; lobbyMarks(); hud(); }; $('qModes').appendChild(b); }
+document.querySelectorAll('.mode .btn').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+$('qNext').onclick = nextQuestion; $('gStart').onclick = () => { sfx('next'); startRound(); }; $('gSetup').onclick = openLobby; $('gReplay').onclick = () => quiz && select(quiz.target);
+/* 가림막: 카드·서랍의 열림 상태를 지켜보다가 맞춘다. 서랍이 열려 있을 때 바깥을 누르면 서랍이 닫힌다 */
+function syncScrim() {
+  const sc = $('gScrim'), drawer = !$('qRew').hidden; sc.classList.toggle('over', drawer); sc.classList.toggle('on', drawer || !$('gLobby').hidden || !$('gResult').hidden);
+  const a = sc.getBoundingClientRect(), f = frontEl.getBoundingClientRect(), l = f.left - a.left, t = f.top - a.top, r = l + f.width, b = t + f.height;
+  sc.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${l}px ${t}px, ${r}px ${t}px, ${r}px ${b}px, ${l}px ${b}px, ${l}px ${t}px)`;
+}
+{ const mo = new MutationObserver(syncScrim); for (const id of ['gLobby', 'gResult', 'qRew']) mo.observe($(id), { attributes: true, attributeFilter: ['hidden'] }); }
+$('gScrim').onclick = () => { $('qRew').hidden = true; };
+$('gRank').onclick = () => { $('qRew').hidden = !$('qRew').hidden; }; $('gRewClose').onclick = () => { $('qRew').hidden = true; };
+$('qSfx').onclick = e => { sfxOn = !sfxOn; const b = e.currentTarget, t = 'Sound effects: ' + (sfxOn ? 'on' : 'off'); b.classList.toggle('off', !sfxOn); b.title = t; b.setAttribute('aria-label', t); if (sfxOn) sfx('next'); };
+$('qReset').onclick = () => { if (!confirm('Reset your rank, badges, best scores and looks on this browser?')) return; Object.assign(save, blank()); persist(); applyLook(save.look); renderRewards(); hud(); };
+addEventListener('keydown', e => {
+  if (!$('wrap').classList.contains('game') || e.target.tagName === 'INPUT') return;
+  if (e.key === 'Escape') { $('qRew').hidden = true; return; }
+  if (/^[1-4]$/.test(e.key) && quiz && !quiz.done && !$('dock').hidden) answer(quiz.options[+e.key - 1]);
+  else if (e.key === 'Enter' || e.key === 'ArrowRight') { e.preventDefault(); nextQuestion(); }
+  else if ((e.key === 'r' || e.key === 'R') && quiz) select(quiz.target);
+});
+let camGoal = null;
+const VIEWS = { side: [0, 0.02, 1], q: [-0.72, 0.14, 0.68], front: [-1, 0.03, 0.02] };
+let FIT = 1.02, lastView = 'side';      // 학사모를 쓰면 위가 잘리지 않게 조금 더 물러난다
+function fitDist() { const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); return Math.max(300 / t, 300 / (t * camera.aspect)) * FIT * (document.getElementById('wrap').classList.contains('game') ? (stage.clientWidth < 600 ? 1.5 : 1.13) : 1); }      // 게임 화면은 위쪽 점수 띠만큼 여유를 둔다
+const viewBtns = document.querySelectorAll('[data-view]');
+function setView(k, instant) { lastView = k; viewBtns.forEach(b => b.classList.toggle('on', b.dataset.view === k)); const v = new THREE.Vector3(...VIEWS[k]).normalize().multiplyScalar(fitDist()).add(TARGET); if (instant) camera.position.copy(v); else camGoal = v; }
+viewBtns.forEach(b => b.onclick = () => setView(b.dataset.view));
+canvas.addEventListener('pointerdown', () => { camGoal = null; viewBtns.forEach(b => b.classList.remove('on')); });
+
+/* ── 루프 ── */
+let INS_W = 208, INS_H = 230, INS_M = 17;      // 정면 인셋의 크기와 여백(좁은 화면에서는 줄인다)
+const frontEl = document.querySelector('.front');
+function resize() { const w = stage.clientWidth, h = stage.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  INS_W = Math.min(208, Math.max(96, Math.round(w * 0.27))); INS_H = Math.round(INS_W * 230 / 208); INS_M = w < 600 ? 9 : 17; frontEl.style.width = INS_W + 2 + 'px'; frontEl.style.height = INS_H + 2 + 'px'; syncScrim(); }
+addEventListener('resize', () => { resize(); }); resize(); setView('side', true);
+/* 창 크기는 그대로인데 무대 높이만 바뀌는 경우(문제 카드가 채워지며 아래 칸이 커질 때 등)에도 그림 크기를 맞춘다. 맞추지 않으면 모형이 눌려 보인다 */
+{ let sw = stage.clientWidth, sh = stage.clientHeight; new ResizeObserver(() => { if (stage.clientWidth === sw && stage.clientHeight === sh) return; sw = stage.clientWidth; sh = stage.clientHeight; resize(); update(performance.now()); }).observe(stage); }
+let last = performance.now();
+function frame(now) { update(now); requestAnimationFrame(frame); }
+function update(now) {
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
+  if (to) {
+    const el = (now - t0) / tDur, E = q => ease(Math.min(1, el / TIM[q]));
+    for (const q of ['tongue', 'skin', 'velum', 'tg']) { const e = E(q); cur[q] = from[q].map((v, i) => v + (to[q][i] - v) * e); }
+    cur.jaw = lerp(from.jaw, to.jaw, E('jaw')); cur.mw = lerp(from.mw, to.mw, E('mw'));
+    applyShapes(); if (el >= 1.15) to = null;
+  }
+  /* 비지속음(폐쇄음·비음 폐쇄음·파찰음): 막고 → 잠시 유지 → 터뜨려 기본 자세로 돌아온다. 지속음은 조음 자세를 유지한다.
+     비음은 막고 있는 동안 공기가 코로 나가고, 파찰음은 터뜨린 뒤 마찰 구간을 거쳐 기본 자세로 돌아온다 */
+  const nasal = sound && sound.manner === 'nasal', closing = sound && sound.kind === 'c' && (sound.manner === 'stop' || sound.manner === 'affricate' || nasal);
+  if (closing && phase === 'hold' && now - phaseT > (DBG.hold ?? (nasal ? 1900 : 1500))) { phase = 'release'; phaseT = now;
+    if (!nasal) { const fb = BLOCK[sound.place]; burstT = now; burstS = (sound.voiced ? 0.62 : 1) * (sound.manner === 'affricate' ? 0.5 : 1);      // 무성음은 세게(기식), 유성음은 약하게, 파찰음은 서서히
+      dots.forEach((d, i) => { const u = d.userData; if (sound.sym === 'ʔ') { if (i % 3 === 0) { u.u = 0.004 + 0.02 * Math.random(); u.b = 1; } } else u.b = u.u <= fb + 0.01 && u.u > fb - 0.15 ? 1 : 0; }); } if (sound.manner === 'affricate') go(targetOf({ ...sound, t: { palfr: 1 } }, false), 380); else go(targetOf(sound, true), nasal ? 340 : 260); }      // 파열: 빠르게 터진다
+  else if (sound && sound.manner === 'affricate' && phase === 'release' && now - phaseT > 1100) { phase = 'rest'; phaseT = now; go(targetOf(sound, true), 380); }
+  const glottal = sound && sound.sym === 'ʔ' && phase === 'hold', voiced = sound && sound.voiced;
+  const gap = glottal ? 0 : voiced ? 1.2 + Math.abs(Math.sin(now * 0.045)) * 2.6 : 9.5;
+  foldL.position.copy(W(287 - 8.5 - gap, 386, 0)); foldR.position.copy(W(287 + 8.5 + gap, 386, 0));
+  const lateral = sound && sound.sym === 'l', nasHold = nasal && phase === 'hold', nasRel = nasal && phase === 'release' && now - phaseT < 520;      // 비음을 터뜨리는 순간에는 코와 입 양쪽으로 나간다
+  const f = sound && sound.kind === 'c' ? BLOCK[sound.place] : null;
+  const blocked = closing && phase === 'hold' && !nasal, hold = blocked && f !== null;
+  const fric = sound && sound.kind === 'c' && (sound.manner === 'fricative' || (sound.manner === 'affricate' && phase === 'release'));
+  const press = hold ? Math.min(1, (now - phaseT) / 1100) : 0;                                   // 막고 있는 동안 압력이 오른다
+  const bk = burstT ? (now - burstT) / 480 : 2, bs = bk < 1 ? burstS * (1 - bk) * (1 - bk) : 0;      // 터지는 세기: 0.48초 동안 잦아든다
+  for (const d of dots) {
+    const u0 = d.userData;
+    if (u0.wait > 0) { u0.wait -= dt; d.visible = false; continue; }      // 입 밖으로 나간 뒤 다시 흘러나올 차례를 기다린다
+    if (u0.b && bs <= 0) u0.b = 0;      // 터지는 힘이 다하면 보통 흐름으로 돌아간다
+    let speed = 0.34; if (fric && f !== null && u0.u > f) speed = 0.62;
+    if (hold && u0.u < f && u0.u > f - 0.3) speed *= 1 - 0.75 * press * (1 - (f - u0.u) / 0.3);      // 막힌 곳에 가까울수록 느려진다
+    if (bs > 0) speed += u0.b ? 3.4 * bs : f !== null && u0.u < f ? 1.1 * bs : 0;                       // 터지면 갇혀 있던 공기가 한꺼번에 빠져나가고 뒤따르는 공기도 빨라진다
+    u0.u += speed * dt;
+    if (hold) { const lim = f - 0.02 - u0.j * (0.085 - 0.04 * press); if (u0.u > lim && u0.u < f + 0.2) u0.u = lim; }      // 압력이 오를수록 더 촘촘히 뭉친다
+    if (u0.b && u0.u >= 0.915) {      // 입 밖으로 나오면 퍼지는 입자로 바꾸고, 본래 흐름으로 돌아갈 차례를 정한다
+      const ex = ORAL.getPointAt(0.915); for (let q = 0; q < (burstS > 0.9 ? 2 : 1); q++) puff(ex, 90 + 380 * bs, 60 + 150 * bs);
+      u0.b = 0; u0.u = 0; u0.wait = Math.random() * 1.7; d.visible = false; continue;
+    }
+    u0.u = ((u0.u % 1) + 1) % 1;
+    const p = (nasHold || (nasRel && u0.side > 0) ? NASAL : ORAL).getPointAt(u0.u), packed = hold && u0.u > f - 0.11 && u0.u <= f;
+    if (fric && f !== null && Math.abs(u0.u - f) < 0.06) { p.x += Math.sin(now * 0.05 + u0.j * 40) * 2.2; p.y += Math.cos(now * 0.06 + u0.j * 30) * 3.2; }
+    if (packed) { const am = 0.8 + 2.4 * press; p.x += Math.sin(now * 0.06 + u0.j * 40) * am; p.y += Math.cos(now * 0.07 + u0.j * 31) * am; p.z += Math.sin(u0.j * 57) * (5 + 5 * press); }      // 갇힌 공기가 떨린다
+    if (u0.b && bs > 0 && f !== null && u0.u > f) { const sp = 11 * bs * Math.min(1, (u0.u - f) / 0.05); p.y += Math.sin(u0.j * 50) * sp; p.z += Math.cos(u0.j * 71) * sp; }      // 터져 나가며 퍼진다
+    if (lateral) p.z = u0.side * 58 * Math.exp(-(((u0.u - f) / 0.075) ** 2));       // 설측음: 혀 옆으로 흐른다
+    d.position.copy(p); d.visible = !(blocked && f !== null && u0.u > f + 0.2); d.scale.setScalar(packed ? 1 + 0.45 * press : u0.b && bs > 0 ? 1.2 : 1);
+  }
+  for (const m of puffs) { if (!m.visible) continue; const u = m.userData; u.life -= dt; if (u.life <= 0) { m.visible = false; continue; } m.position.addScaledVector(u.v, dt); u.v.multiplyScalar(Math.max(0, 1 - 3.2 * dt)); m.scale.setScalar(0.3 + 1.4 * u.life / u.max); }
+  stepReact(now);
+  if (camGoal) { camera.position.lerp(camGoal, 0.12); if (camera.position.distanceTo(camGoal) < 2) camGoal = null; }
+  controls.update();
+  // 본 화면
+  const w = stage.clientWidth, h = stage.clientHeight, mid = cut < 6;
+  cutPlane.constant = cut; caps.visible = mid; caps.position.z = cut - 0.03; skinMesh.castShadow = hair.castShadow = !xray; skinMesh.material = xray ? mat.skinX : mat.skin; extras.visible = !mid || xray; hair.material = xray ? mat.hairX : mat.hair; hairBack.visible = !xray;
+  skinBack.visible = !xray; paintA.visible = paintB.visible = mid && !xray; mouthIn.visible = !mid && !xray;
+  renderer.setScissorTest(false); renderer.setViewport(0, 0, w, h); renderer.clear(); renderer.render(scene, camera);
+  if (showTags) {
+    { const t = TAGS[UVULA_I], ux = cur.velum[14], uy = cur.velum[15]; t[3] = ux; t[4] = uy - 4; t[1] = ux + 48; t[2] = uy + 12; }      // 목젖: 연구개의 끝(경로의 14·15번 값)을 따라간다
+    { const t = TAGS[VELUM_I]; t[3] = (cur.velum[0] + cur.velum[6]) / 2 + 6; t[4] = (cur.velum[1] + cur.velum[7]) / 2 + 6; }      // 연구개: 몸통 가운데(올라가거나 내려가도 따라간다)
+    TAGS.forEach((t, i) => {
+      const v = W(t[1], t[2], 2).project(camera), el = tagEls[i], hw = el.offsetWidth / 2 + 6, lx = Math.max(hw, Math.min(w - hw, (v.x * 0.5 + 0.5) * w)), ly = (-v.y * 0.5 + 0.5) * h; el.style.left = lx + 'px'; el.style.top = ly + 'px';      // 화면 밖으로 잘리지 않게
+      if (!tagLn[i]) return;
+      const a = W(t[3], t[4], 2).project(camera), ax = (a.x * 0.5 + 0.5) * w, ay = (-a.y * 0.5 + 0.5) * h, dx = ax - lx, dy = ay - ly;
+      const k = Math.min(1, (el.offsetWidth / 2 + 4) / (Math.abs(dx) || 1e-6), (el.offsetHeight / 2 + 3) / (Math.abs(dy) || 1e-6)), [ln, dot] = tagLn[i];      // 글자 상자 가장자리에서 선을 시작
+      ln.setAttribute('x1', lx + dx * k); ln.setAttribute('y1', ly + dy * k); ln.setAttribute('x2', ax); ln.setAttribute('y2', ay); dot.setAttribute('cx', ax); dot.setAttribute('cy', ay);
+    });
+  }
+  // 정면 인셋: 자르지 않은 얼굴
+  cutPlane.constant = 9999; caps.visible = false; skinMesh.castShadow = hair.castShadow = true; skinMesh.material = mat.skin; extras.visible = true; hair.material = mat.hair; hairBack.visible = true; skinBack.visible = true; paintA.visible = paintB.visible = false; mouthIn.visible = true;
+  renderer.setScissorTest(true); renderer.setScissor(INS_M, INS_M, INS_W, INS_H); renderer.setViewport(INS_M, INS_M, INS_W, INS_H);
+  let g0 = null;
+  if (talk) { const k = (now - talk.t0) / talk.dur; if (k >= 1) talk = null; else if (k > 0) { const a = LIPU.uLipA.value, env = Math.min(1, k * 7, (1 - k) * 7), fl = 0.5 - 0.5 * Math.cos(k * talk.n * 2 * Math.PI); g0 = a.y; a.y = g0 + (1.2 + 6.3 * fl - g0) * env; } }
+  renderer.setClearColor(0xf7f3ea, 1); renderer.clear(); renderer.render(scene, frontCam); renderer.setClearColor(0x000000, 0);
+  if (g0 !== null) LIPU.uLipA.value.y = g0;
+}
+applyShapes(); buildArms(); applyLook(save.look); buildBand(); renderRewards();
+select(ALL.find(s => s.sym === (new URLSearchParams(location.search).get('s') || 'ə')) || VOWELS[5]);
+{ const q = new URLSearchParams(location.search); if (q.get('mode') === 'practice') { if (QLV.some(l => l[0] === q.get('level'))) qs.level = q.get('level'); if (MODES.some(m => m[0] === q.get('game'))) qs.mode = q.get('game'); setMode('practice'); } }
+requestAnimationFrame(frame);
+window.__v3d = { DBG, puffs, dots, update, say, mouthAt, LIPU, talkState: () => talk, save, applyLook, renderRewards, qs, stateOf: s => { const t = targetOf(s, false); return { tongue: rot(t.tongue, t.jaw, () => 0.85), skin: rot(t.skin, t.jaw, wSkin), velum: t.velum, jaw: t.jaw, tg: t.tg, mw: t.mw }; }, BONE, JAW_MAX, PIVOT, head, P, mat, eyes, placeEyes, applyShapes, buildHead, cur, select: sym => select(ALL.find(s => s.sym === sym)), ALL, camera, controls, setView, setCut: v => { cutEl.value = v; setCut(); }, setXray: v => { xray = v; } };
+</script>
+</body>
+</html>

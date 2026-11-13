@@ -1,0 +1,12 @@
+# Never publish exam or assessment material
+exams/
+*중간고사*
+*기말고사*
+*시험*
+*정답*
+*.pdf
+
+# Local files
+.claude/
+Thumbs.db
+.DS_Store
