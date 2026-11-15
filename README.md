@@ -23,5 +23,5 @@ Add these to the address to open a particular screen:
 ## Notes
 
 - The model is schematic: shapes are idealized to show place, manner, voicing and lip rounding.
-- Badge and result art is AI-generated.
+- Badge, host-character and result art is AI-generated.
 - Built as a single HTML file with [three.js](https://threejs.org/) loaded from a CDN.
