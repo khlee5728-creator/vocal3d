@@ -453,6 +453,7 @@ const mat = {
   skinX:  M(0xffffff, { roughness: 0.8, vertexColors: true, envMapIntensity: 0.22, transparent: true, opacity: 0.2, depthWrite: false }),
   ear:    M(0xffffff, { roughness: 0.72, sheen: 0.45, sheenColor: new THREE.Color(0xffd9c8), sheenRoughness: 0.5, vertexColors: true, envMapIntensity: 0.25 }),
   hair:   M(0xffffff, { roughness: 0.48, anisotropy: 0.8, sheen: 0.2, sheenColor: new THREE.Color(0xd9a878), sheenRoughness: 0.4, vertexColors: true, envMapIntensity: 0.2, transparent: true }), hairCut: B(0x5a3b27),
+  hairIn: M(0xffffff, { roughness: 0.62, vertexColors: true, envMapIntensity: 0.12, side: THREE.BackSide }),      // 머리카락 안쪽 면(자르지 않은 머리에서 턱 옆·목 뒤로 보이는 곳): 겉과 같은 색·가닥 무늬에 빛을 받는다. 단색(hairCut)은 잘린 면에만 쓴다
   hairX:  M(0xffffff, { roughness: 0.5, vertexColors: true, envMapIntensity: 0.35, transparent: true, opacity: 0.2, depthWrite: false }),
   hood:   M(0x9dbde6, { roughness: 0.85, sheen: 0.5, sheenColor: new THREE.Color(0xdbe8fa), envMapIntensity: 0.2 }), hoodCut: B(0x86a6d0),
   lash:   M(0x35241d, { roughness: 0.6, envMapIntensity: 0.1, side: THREE.DoubleSide }),
@@ -509,10 +510,11 @@ const SSS_GLSL = `
     totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.34, 0.2) * 0.12 * smoothstep(-0.5, 0.05, ndl) * (1.0 - smoothstep(0.05, 0.6, ndl));
     totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.74, 0.62) * 0.11 * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0); }`;
 const STRAND_GLSL = `
-  float th = vF.x * (vF.z < 0.0 ? -1.0 : 1.0), wvy = sin(vF.y * 0.045 + th * 3.0), fine = 1.0 - smoothstep(0.012, 0.03, fwidth(vF.x));
+  float th = vF.x * (vF.z < 0.0 ? -1.0 : 1.0), wvy = sin(vF.y * 0.045 + th * 3.0), fwT = fwidth(vF.x);
+  float f1 = 1.0 - smoothstep(0.6, 1.8, 31.0 * fwT), f2 = 1.0 - smoothstep(0.6, 1.8, 67.0 * fwT), f3 = 1.0 - smoothstep(0.6, 1.8, 127.0 * fwT);      // 무늬마다 한 화소에 담기는 위상(rad)으로 접는다: 화소보다 촘촘해지는 윤곽 근처·먼 거리에서 자글거리지 않게
   float p1 = 31.0 * th + wvy * 1.2, p2 = 67.0 * th + 1.7 + wvy * 2.0, p3 = 127.0 * th + 4.1 + wvy;
-  float strand = 0.5 + 0.5 * (0.42 * sin(p1) + 0.34 * sin(p2) + 0.24 * fine * sin(p3));      // 가닥 무늬: 정수 진동수라 뒤통수 이음매에서도 이어진다
-  float hairDn = 0.3 * cos(p1) + 0.5 * cos(p2) + 0.6 * fine * cos(p3);
+  float strand = 0.5 + 0.5 * (0.42 * f1 * sin(p1) + 0.34 * f2 * sin(p2) + 0.24 * f3 * sin(p3));      // 가닥 무늬: 정수 진동수라 뒤통수 이음매에서도 이어진다
+  float hairDn = 0.3 * f1 * cos(p1) + 0.5 * f2 * cos(p2) + 0.6 * f3 * cos(p3);
   diffuseColor.rgb *= mix(0.78, 1.16, strand);
   { float band = exp(-pow((vF.y - (14.0 + 5.0 * sin(th * 7.0) + 9.0 * strand)) / 9.0, 2.0)) * (0.5 + 0.5 * sin(th * 2.3 + 0.8));      // 윤기: 흰 띠를 덧칠하지 않고 머리색 자체를 가닥 따라 밝힌다(짙은 머리에서는 은은하게, 둘레를 따라 끊겼다 이어진다)
     diffuseColor.rgb *= 1.0 + 0.55 * band * strand * strand;
@@ -522,11 +524,13 @@ const HAIR_GLSL = `
   float fa = clamp(vF.x / 3.14159265, 0.0, 1.0) * 63.0; int i0 = int(floor(fa)), i1 = min(i0 + 1, 63);
   float yH = mix(uHL[i0], uHL[i1], fract(fa));
   if (vF.x < 1.0) yH += (6.0 * sin(vF.z * 0.1 + 0.7) + 0.11 * vF.z - 50.0 * exp(-pow((vF.z - 26.0) / (vF.z < 26.0 ? 36.0 : 14.0), 2.0))) * (1.0 - vF.x);      // 앞머리: 살짝 옆으로 넘긴 물결
-  { float thh = vF.x * (vF.z < 0.0 ? -1.0 : 1.0), st = thh * 64.0, sr = fract(sin(floor(st) * 12.9898) * 43758.5453), tip = abs(fract(st) - 0.5) * 2.0, fineH = 1.0 - smoothstep(0.3, 0.9, fwidth(thh) * 64.0);
-    yH += 2.2 * sin(7.0 * thh + 1.3) + fineH * (4.2 * (sr - 0.5) - 3.4 * tip * tip) * (1.0 + 1.5 * (1.0 - smoothstep(0.7, 1.1, vF.x))); }      // 가닥마다 길이가 다르고 끝이 가늘어진다(멀리서는 잔가닥을 접는다)
-  float hv = 0.5 - (yH - vF.y - 1.5) / 14.0, fwH = max(fwidth(hv), 1e-4), cov = 1.0 - smoothstep(0.5 - fwH - 0.16, 0.5 + fwH, hv);`;
-function hook(m, kind) {      // kind: skin(입술 색 + 부드러운 구멍) · skinCut(구멍만) · hair · hairCut
-  const isHair = kind.startsWith('hair'), soft = !kind.endsWith('Cut');
+  { float thh = vF.x * (vF.z < 0.0 ? -1.0 : 1.0), fr = mix(0.3, 1.0, 1.0 - smoothstep(0.7, 1.1, vF.x));
+    float lu = 13.0 * thh + 0.9 * sin(5.0 * thh + 1.0) + 0.5 * sin(11.0 * thh), ls = abs(sin(lu));      // 굵은 다발: 앞머리에 일곱 개쯤, 폭이 조금씩 다르다
+    float gapD = smoothstep(-0.3, 0.7, sin(4.0 * thh + 0.8) + 0.5 * sin(9.0 * thh + 2.0));      // 틈은 군데군데만 깊다(다발마다 똑같이 파이면 레이스처럼 보인다)
+    yH += 1.4 * sin(7.0 * thh + 1.3) + fr * (0.9 * sin(lu + 0.6) + 0.5 * (ls - 0.6) - (0.6 + 3.2 * gapD) * (1.0 - smoothstep(0.0, 0.4, ls))); }      // 끝선: 다발 끝은 고르고 다발 사이에만 얕은 틈(가닥마다 뾰족하게 자르면 빗살처럼 보이고 움직일 때 자글거린다). 정수 진동수라 뒤통수에서도 이어진다
+  float hv = 0.5 - (yH - vF.y - 1.5) / 14.0, fwH = max(fwidth(hv), 1e-4), cov = 1.0 - smoothstep(0.5 - fwH - 0.2, 0.5 + fwH, hv);`;
+function hook(m, kind) {      // kind: skin(입술 색 + 부드러운 구멍) · skinCut(구멍만) · hair · hairIn(안쪽 면: 가닥 무늬, 끝선은 또렷하게) · hairCut
+  const isHair = kind.startsWith('hair'), soft = !kind.endsWith('Cut') && kind !== 'hairIn', strands = kind === 'hair' || kind === 'hairIn';
   m.customProgramCacheKey = () => 'v3d-' + kind;
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, LIPU);
@@ -534,7 +538,7 @@ function hook(m, kind) {      // kind: skin(입술 색 + 부드러운 구멍) ·
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvF = ' + (isHair ? 'vec4(ha, ysvg, hz, 0.0);' : 'vec4(ysvg, position.z, position.x, 0.0);'));
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec4 vF; uniform vec3 uSun; uniform float uHL[64]; uniform vec4 uLipA; uniform vec4 uLipB; uniform vec3 uLipC; uniform vec3 uLipD; uniform float uJoy; uniform float uSad; uniform vec3 uBrow;' + (kind === 'skin' ? NOISE_GLSL : ''))
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + (kind === 'skin' ? '  { vec3 sp = vec3(vF.z, vF.x, vF.y); float fw = length(fwidth(sp)), bh = (1.0 - smoothstep(0.45, 1.5, fw)) * 0.1 * vn(sp * 2.4) + lipM * (1.0 - smoothstep(0.8, 2.4, fw)) * 0.08 * sin(vF.y * 1.3 + 2.4 * vn(sp * 0.4));' + PERTURB_GLSL + ' }' : ''))
-      .replace('#include <color_fragment>', '#include <color_fragment>\n' + (isHair ? HAIR_GLSL + (kind === 'hair' ? STRAND_GLSL : '') : LIP_GLSL + (kind === 'skin' ? SKIN_GLSL + '\n  diffuseColor.rgb = mix(diffuseColor.rgb, lipCol, lipM);' : ''))
+      .replace('#include <color_fragment>', '#include <color_fragment>\n' + (isHair ? HAIR_GLSL + (strands ? STRAND_GLSL : '') + (kind === 'hairIn' ? '\n  diffuseColor.rgb *= mix(0.46, 0.68, smoothstep(yH - 130.0, yH - 8.0, vF.y));      // 안쪽 면은 깊이 들어갈수록 어둡다(머리에 가려진 그늘)' : '') : LIP_GLSL + (kind === 'skin' ? SKIN_GLSL + '\n  diffuseColor.rgb = mix(diffuseColor.rgb, lipCol, lipM);' : ''))
         + (soft ? '\n  diffuseColor.a *= cov; if (diffuseColor.a < 0.02) discard;' : '\n  if (cov < 0.5) discard;'))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n' + (kind === 'skin' ? '  roughnessFactor = mix(roughnessFactor, 0.32, lipM);' : ''))
       .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n' + (kind === 'hair' ? '#ifdef USE_TANGENT\n  normal = normalize(normal + normalize(vTangent) * hairDn * 0.22);\n#endif' : ''))
@@ -572,7 +576,7 @@ const eyeMat = sgn => { const m = M(0xffffff, { roughness: 0.55, clearcoat: 0.1,
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vE; uniform float uEye; uniform float uJoy; uniform float uSad; uniform float uBlink; uniform vec3 uSkin; uniform vec2 uLook;').replace('#include <color_fragment>', '#include <color_fragment>\n' + EYE_GLSL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vec3(0.85) * glint;'); };
   return m; };
-hook(mat.skin, 'skin'); hook(mat.skinX, 'skin'); hook(mat.skinCut, 'skinCut'); hook(mat.hair, 'hair'); hook(mat.hairX, 'hair'); hook(mat.hairCut, 'hairCut');
+hook(mat.skin, 'skin'); hook(mat.skinX, 'skin'); hook(mat.skinCut, 'skinCut'); hook(mat.hair, 'hair'); hook(mat.hairX, 'hair'); hook(mat.hairCut, 'hairCut'); hook(mat.hairIn, 'hairIn');
 /* 표면의 잔결: 높이값(bh)을 식으로 주면 화면 미분으로 법선을 기울인다(무늬 이미지를 쓰지 않는다). 멀리서는 잔무늬가 지글거리지 않게 식 안에서 세기를 줄인다 */
 const NOISE_GLSL = `
 float h31(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }
@@ -877,7 +881,7 @@ function earGeo() {
 const kg = new THREE.BufferGeometry(); kg.setIndex(hg.index);
 const kPos = new Float32Array(NR * NC * 3), kCol = new Float32Array(NR * NC * 3), kA = new Float32Array(NR * NC), kZ = new Float32Array(NR * NC), kTan = new Float32Array(NR * NC * 4);
 kg.setAttribute('position', new THREE.BufferAttribute(kPos, 3)); kg.setAttribute('color', new THREE.BufferAttribute(kCol, 3)); kg.setAttribute('tangent', new THREE.BufferAttribute(kTan, 4)); kg.setAttribute('ha', new THREE.BufferAttribute(kA, 1)); kg.setAttribute('hz', new THREE.BufferAttribute(kZ, 1)); kg.setAttribute('ysvg', hg.attributes.ysvg);
-const hair = new THREE.Mesh(kg, mat.hair), hairBack = new THREE.Mesh(kg, mat.hairCut); hair.castShadow = hair.receiveShadow = true; hair.customDepthMaterial = hairDepth; hair.renderOrder = 4; hairBack.renderOrder = 0; head.add(hairBack, hair);
+const hair = new THREE.Mesh(kg, mat.hair), hairBack = new THREE.Mesh(kg, mat.hairCut); hair.castShadow = hair.receiveShadow = hairBack.receiveShadow = true; hair.customDepthMaterial = hairDepth; hair.renderOrder = 4; hairBack.renderOrder = 0; head.add(hairBack, hair);
 const HAIRC = new THREE.Color(0x8a5c3c), HAIRD = new THREE.Color(0x5e3d28);
 const HL = [[0, 66], [0.5, 67], [0.85, 71], [1.0, 104], [1.13, 200], [1.28, 330], [1.6, 350], [2.2, 358], [3.15, 360]];      // 턱 아래로 조금 내려오는 긴 단발
 const lin = (T, v) => { let k = 1; while (k < T.length - 1 && T[k][0] < v) k++; const [a0, b0] = T[k - 1], [a1, b1] = T[k]; return b0 + (b1 - b0) * Math.min(1, Math.max(0, (v - a0) / (a1 - a0))); };   // 앞(0)→옆→뒤(π): 머리카락이 내려오는 높이
@@ -1524,7 +1528,7 @@ function update(now) {
   controls.update();
   // 본 화면
   const w = stage.clientWidth, h = stage.clientHeight, mid = cut < 6;
-  cutPlane.constant = cut; caps.visible = mid; caps.position.z = cut - 0.03; skinMesh.castShadow = hair.castShadow = !xray; skinMesh.material = xray ? mat.skinX : mat.skin; extras.visible = !mid || xray; hair.material = xray ? mat.hairX : mat.hair; hairBack.visible = !xray;
+  cutPlane.constant = cut; caps.visible = mid; caps.position.z = cut - 0.03; skinMesh.castShadow = hair.castShadow = !xray; skinMesh.material = xray ? mat.skinX : mat.skin; extras.visible = !mid || xray; hair.material = xray ? mat.hairX : mat.hair; hairBack.visible = !xray; hairBack.material = cut > 235 ? mat.hairIn : mat.hairCut;
   skinBack.visible = !xray; paintA.visible = paintB.visible = SEC.visible = JAWSEC.visible = mid && !xray; mouthIn.visible = !mid && !xray; BUST.visible = !mid;
   const idle = REDUCE ? null : [Math.sin(now * 0.0021) * 1.1, Math.sin(now * 0.0011) * 0.02 + Math.sin(now * 0.00047 + 1.3) * 0.011, Math.sin(now * 0.0008 + 0.6) * 0.011];      // [숨(위아래), 좌우로 살짝 돌림, 갸웃]
   const sway = on => { if (!idle) return; const k = on ? 1 : -1; head.position.y += k * idle[0]; head.rotation.y += k * idle[1]; head.rotation.z += k * idle[2]; };
@@ -1556,7 +1560,7 @@ function update(now) {
     });
   }
   // 정면 인셋: 자르지 않은 얼굴
-  cutPlane.constant = 9999; caps.visible = false; skinMesh.castShadow = hair.castShadow = true; skinMesh.material = mat.skin; extras.visible = true; hair.material = mat.hair; hairBack.visible = true; skinBack.visible = true; paintA.visible = paintB.visible = SEC.visible = JAWSEC.visible = false; mouthIn.visible = true; BUST.visible = true;
+  cutPlane.constant = 9999; caps.visible = false; skinMesh.castShadow = hair.castShadow = true; skinMesh.material = mat.skin; extras.visible = true; hair.material = mat.hair; hairBack.visible = true; hairBack.material = mat.hairIn; skinBack.visible = true; paintA.visible = paintB.visible = SEC.visible = JAWSEC.visible = false; mouthIn.visible = true; BUST.visible = true;
   renderer.setScissorTest(true); renderer.setScissor(INS_X, INS_Y, INS_W, INS_H); renderer.setViewport(INS_X, INS_Y, INS_W, INS_H);
   sway(true); renderer.setClearColor(0xf7f3ea, 1); renderer.clear(); renderer.render(scene, frontCam); renderer.setClearColor(0x000000, 0); sway(false);
 }
