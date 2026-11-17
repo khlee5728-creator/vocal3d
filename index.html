@@ -250,7 +250,38 @@
   @keyframes qspark { 0% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.4) rotate(120deg); } }
   @media (prefers-reduced-motion: reduce) { .host.pop img { animation: none; } .gscrim, .gscrim.on { transition: none; } .bubble.on { animation: none; opacity: 1; } .bubble.off, .bubble .bi { animation: none !important; } .qopt.ok, .qopt.no, .qhud b.pop { animation: none; } .qspark, .conf { display: none; } }
   .foot { font: italic 400 12.5px/1.45 'Lora'; color: var(--muted); margin-top: 14px; border-top: 1px solid var(--line); padding-top: 8px; }
-  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; grid-template-rows: max(62vh, min(300px, 92vh)) auto; height: auto; } .panel { border-left: 0; border-top: 1px solid var(--line); padding-top: 20px; } .modebar { width: auto; right: 12px; top: 10px; background: var(--paper); } }
+  /* 좁은 화면의 Explore: 모형은 늘 보이는 자리에 고정하고 아래(옆) 칸만 따로 넘긴다. 기호·설명은 모형 위 왼쪽 구석으로 올리고, 칸은 탭(자음·모음·보기)으로 나눈다 */
+  .tabs, .snow { display: none; } .nowmain { display: contents; }
+  .snow { position: absolute; left: 12px; top: 10px; z-index: 2; max-width: calc(100% - 200px); grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: center; pointer-events: none; }
+  .snow .sym { font: 400 38px/1 'Lora'; min-width: 30px; text-align: center; }
+  .snow .desc { font: 600 9.5px/1.45 'Space Grotesk'; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  .snow .word { font: italic 400 14px/1.2 'Lora'; color: var(--body); margin-top: 2px; }
+  @media (max-width: 860px), (max-height: 520px) {
+    .modebar { width: auto; right: 12px; top: 10px; background: var(--paper); }
+    .wrap:not(.game) .hint { display: none; } .wrap:not(.game) .snow { display: grid; }
+    /* 성대 표시는 기호·설명 아래 왼쪽 줄로 옮기고 한 낱말로 줄인다: 오른쪽은 모형이 다 쓴다 */
+    .wrap:not(.game) .voice { left: 12px; right: auto; top: 78px; bottom: auto; text-align: left; padding: 5px 8px; font-size: 9px; letter-spacing: 0.14em; } .wrap:not(.game) .voice b { font-size: 11px; letter-spacing: 0.12em; margin-top: 2px; } .wrap:not(.game) .voice b span { display: none; }
+    .panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-content: start; padding: 10px 14px 14px; overscroll-behavior: contain; }
+    .panel > *, .panel #tools > .ctl, .panel #exploreUI > .grp { grid-column: 1 / -1; }
+    .panel .kick, .panel h1, .panel .grp .lab { display: none; }
+    .panel #toolsHome, .panel #tools, .panel #exploreUI { display: contents; }
+    /* 순서: 탭과 다시 보기·듣기 → 글쇠(또는 보기 도구) → 설명 글 → 안내. 글쇠가 먼저다: 설명 글은 소리마다 줄 수가 달라 위에 두면 글쇠가 밀린다 */
+    .panel .now { display: block; order: 1; border: 0; padding: 0; } .panel .foot { order: 2; margin-top: 10px; }
+    .panel .now .note { margin: 10px 0 0; font-size: 13px; line-height: 1.45; }
+    .panel .tabs { display: inline-grid; grid-auto-columns: auto; grid-column: 1; grid-row: 1; justify-self: start; } .tabs .btn { padding: 0 9px; letter-spacing: 0.1em; }
+    .panel #tplay { grid-column: 2; grid-row: 1; flex-wrap: nowrap; } .panel #tplay .btn { width: 36px; padding: 0; gap: 0; font-size: 0; }
+    .panel .grp { margin-top: 8px; } .panel .row { grid-template-columns: 72px 1fr; padding: 2px 0; } .panel .row .pl { font-size: 9px; letter-spacing: 0.1em; } .panel .ctl { margin-top: 12px; }
+    .panel .keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); } .panel .key { min-width: 0; width: 100%; padding: 0; }      /* 휴대폰 너비에서 한 줄에 일곱 글쇠: 치경음 일곱이 한 줄에 들어가 자음 전체가 모형과 한 화면에 놓인다 */
+    .panel:not([data-tab="cons"]) .grp[data-pane="cons"], .panel:not([data-tab="vows"]) .grp[data-pane="vows"], .panel:not([data-tab="view"]) #tools > .ctl { display: none; }
+  }
+  @media (max-width: 860px) and (orientation: portrait) {
+    .wrap:not(.game) { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) min(56vh, 432px); grid-template-rows: minmax(0, 1fr) min(56dvh, 432px); }
+    .panel { border-left: 0; border-top: 1px solid var(--line); }
+  }
+  @media (max-width: 860px) and (orientation: landscape), (max-height: 520px) {
+    .wrap:not(.game) { grid-template-columns: minmax(0, 1fr) clamp(300px, 44vw, 372px); grid-template-rows: minmax(0, 1fr); }
+    .panel { padding-top: 54px; }      /* 오른쪽 위의 모드 전환 버튼 자리 */
+  }
 </style>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -262,6 +293,7 @@
   <div class="stage" id="stage">
     <canvas id="view"></canvas>
     <div class="hint">ARTICULATION IN 3D<span>Drag to rotate · scroll to zoom</span></div>
+    <div class="snow" id="snow"></div>
     <div class="front"><div class="cap">FRONT VIEW</div></div>
     <div class="bubble" id="bubble" aria-live="polite"><svg class="tail ts" viewBox="0 0 40 20" preserveAspectRatio="none" aria-hidden="true"><path class="f" d="M40 3C27 4.5 11 9.5 1.2 17.2 12.5 17 27 16.4 40 15.5Z"/><path class="s" vector-effect="non-scaling-stroke" d="M38.2 3.3C26 5 11 9.8 1.2 17.2 12 17 25.6 16.5 38.2 15.6"/></svg><i class="bi"></i><span id="bubbleT"></span></div>
     <div class="host" id="host" hidden><img id="hostImg" alt=""></div>
@@ -304,14 +336,15 @@
       <button class="btn quiet" id="qReset">Reset progress</button>
     </aside>
   </div>
-  <aside class="panel" id="panel">
+  <aside class="panel" id="panel" data-tab="cons">
     <div class="kick" id="kick">CONSONANTS · VOWELS</div>
     <h1>The Vocal Tract</h1>
     <div class="now">
-      <div class="sym" id="sym">ə</div>
-      <div><div class="desc" id="desc">mid central vowel</div><div class="word" id="word">about</div></div>
+      <div class="nowmain" id="nowMain"><div class="sym" id="sym">ə</div>
+      <div><div class="desc" id="desc">mid central vowel</div><div class="word" id="word">about</div></div></div>
       <div class="note" id="note"></div>
     </div>
+    <div class="seg tabs" id="tabs" role="group" aria-label="Sounds and view"><button class="btn on" data-tab="cons" aria-pressed="true">Consonants</button><button class="btn" data-tab="vows" aria-pressed="false">Vowels</button><button class="btn" data-tab="view" aria-pressed="false">View</button></div>
     <div id="toolsHome"><div class="tools" id="tools">
       <div class="trow" id="tplay"><button class="btn" id="replay"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.7-3.75"/><path d="M3 2.6v3.1h3.1"/></svg>Replay</button><button class="btn" id="say"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z"/><path d="M10.4 6a3 3 0 0 1 0 4"/><path d="M12.2 4.3a5.4 5.4 0 0 1 0 7.4"/></svg>Listen</button></div>
       <div class="ctl"><span class="pl">View</span><div class="seg" role="group" aria-label="View"><button class="btn" data-view="side">Side</button><button class="btn" data-view="q">3/4</button><button class="btn" data-view="front">Front</button></div></div>
@@ -319,8 +352,8 @@
       <div class="ctl"><span class="pl">Cut the head</span><input type="range" id="cut" min="0" max="100" value="100" aria-label="Cut the head open" /></div>
     </div></div>
     <div id="exploreUI">
-    <div class="grp"><div class="lab">CONSONANTS · BY PLACE OF ARTICULATION</div><div id="cons"></div></div>
-    <div class="grp"><div class="lab">VOWELS</div><div id="vows"></div></div>
+    <div class="grp" data-pane="cons"><div class="lab">CONSONANTS · BY PLACE OF ARTICULATION</div><div id="cons"></div></div>
+    <div class="grp" data-pane="vows"><div class="lab">VOWELS</div><div id="vows"></div></div>
     </div>
     <p class="foot">A schematic model: shapes are idealized to show place, manner, voicing and lip rounding. Badge, host and result art: AI-generated.</p>
   </aside>
@@ -1384,11 +1417,19 @@ function endRound() {
   select(VOWELS[5]);      // 모형은 기본 자세로 돌아간다
   sfx(up ? 'unlock' : good ? 'win' : 'end'); if (good || up) { reactTo(true, true); confetti(); } say(up && RANKS[r1][2] ? 'unlock' : good || up ? 'win' : 'end');
 }
+/* 좁은 화면의 Explore: 기호·설명을 모형 위 왼쪽 구석으로 옮긴다(아래 칸의 자리를 글쇠에 내준다). 넓은 화면과 Practice에서는 오른쪽 칸의 제자리 */
+const MQC = matchMedia('(max-width: 860px), (max-height: 520px)');
+function placeNow() { const on = MQC.matches && !$('wrap').classList.contains('game'), home = on ? $('snow') : document.querySelector('.now');
+  if ($('nowMain').parentNode !== home) home.insertBefore($('nowMain'), home.firstChild); }
+function setTab(t) { $('panel').dataset.tab = t; $('panel').scrollTop = 0;
+  document.querySelectorAll('#tabs .btn').forEach(b => { const on = b.dataset.tab === t; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }); }
+document.querySelectorAll('#tabs .btn').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 function setMode(m) {
   const practice = m === 'practice'; document.querySelectorAll('.mode .btn').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
   $('wrap').classList.toggle('game', practice); $('ghud').hidden = $('gtools').hidden = !practice;
   const mb = document.querySelector('.modebar'); if (practice) $('ghud').insertBefore(mb, $('ghud').querySelector('.qtimer')); else $('wrap').appendChild(mb);      // 모드 전환 버튼: Practice에서는 위쪽 띠의 줄 안에 넣어 다른 버튼과 높이를 맞춘다
   (practice ? $('gtools') : $('toolsHome')).appendChild($('tools'));      // 보기 도구 묶음을 화면에 맞는 자리로 옮긴다
+  placeNow();
   if (practice) openLobby(); else { clearInterval(qs.tick); clearTimeout(qs.auto); quiz = null; $('qRew').hidden = true; show('none'); $('say').hidden = false; select(VOWELS[5]); }
   resize(); setView(lastView, true);      // 모드마다 모형 자리와 크기가 다르다      // 풀던 문제의 답이 모드 전환으로 드러나지 않게 기본 소리로 돌아간다
 }
@@ -1433,16 +1474,17 @@ let FRAME = { g: 1, ox: 0, oy: 0 }, TOPY = 0, OBS = [], RW = 0, RH = 0;      // 
 /* 점수 띠 아래에서 정면 상자·진행 캐릭터·성대 표시·도구 칸·안내 글을 피해 모형을 가장 크게 놓는다. 옆모습의 윤곽을 상자 셋(머리 위쪽·얼굴과 머리·목)으로 어림한다 */
 function frameModel(w, h, hudH) {
   const sr = stage.getBoundingClientRect(), obs = [];
-  for (const e of [frontEl, $('host'), document.querySelector('.voice'), $('gtools'), document.querySelector('.hint'), document.querySelector('.modebar')]) { if (!e || e.hidden) continue; const r = e.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(e).visibility === 'hidden') continue; if (e.id === 'gtools' && r.width > w * 0.5) continue; if (r.left >= sr.right || r.top >= sr.bottom) continue;
+  for (const e of [frontEl, $('host'), document.querySelector('.voice'), $('gtools'), document.querySelector('.hint'), $('snow'), document.querySelector('.modebar')]) { if (!e || e.hidden) continue; const r = e.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(e).visibility === 'hidden') continue; if (e.id === 'gtools' && r.width > w * 0.5) continue; if (r.left >= sr.right || r.top >= sr.bottom) continue;
     obs.push([r.left - sr.left - 6, r.top - sr.top - (e === frontEl ? 22 : 6), r.right - sr.left + 6, r.bottom - sr.top + 6]); }
   const top = hudH + 8, bot = h - 2, BOX = [[-120, 230, -330, -215], [-198, 264, -215, 100], [-70, 210, 100, 245]];      // [x0, x1, y0, y1]: 시선 중심 기준, 모형 단위
   const clear = (k, tx, ty) => BOX.every(([x0, x1, y0, y1]) => { const a = tx + x0 * k, b = tx + x1 * k, c = ty + y0 * k, d = ty + y1 * k; return a >= 4 && b <= w - 4 && obs.every(o => a >= o[2] || b <= o[0] || c >= o[3] || d <= o[1]); });
   let k = Math.min((bot - top) / 600, (w - 8) / 462);
+  const low = $('snow').offsetWidth > 0;      // 좁은 화면의 Explore: 위쪽 구석을 정보 칸과 모드 버튼이 차지하므로 아래로 붙인 자리도 따져 본다(모형이 더 크게 들어간다)
   for (let i = 0; i < 44; i++, k *= 0.965) { const slack = bot - top - 575 * k;
-    for (const ty of slack > 4 ? [top + slack / 2 + 330 * k, top + 330 * k] : [top + 330 * k]) for (let d = 0; d <= w / 2; d += 4) for (const tx of d ? [w / 2 - d, w / 2 + d] : [w / 2]) if (clear(k, tx, ty)) return { g: h / (612 * k), ox: Math.round(tx - w / 2), oy: Math.round(ty - h / 2) }; }
+    for (const ty of slack > 4 ? [top + slack / 2 + 330 * k, top + 330 * k, ...(low ? [bot - 245 * k] : [])] : [top + 330 * k]) for (let d = 0; d <= w / 2; d += 4) for (const tx of d ? [w / 2 - d, w / 2 + d] : [w / 2]) if (clear(k, tx, ty)) return { g: h / (612 * k), ox: Math.round(tx - w / 2), oy: Math.round(ty - h / 2) }; }
   return { g: 1.2, ox: 0, oy: Math.round(hudH / 2) };
 }
-function resize() { const w = stage.clientWidth, h = stage.clientHeight, wrap = $('wrap'), game = wrap.classList.contains('game'), rew = wrap.classList.contains('rew'); if (!w || !h) return;
+function resize() { placeNow(); const w = stage.clientWidth, h = stage.clientHeight, wrap = $('wrap'), game = wrap.classList.contains('game'), rew = wrap.classList.contains('rew'); if (!w || !h) return;
   if (w !== RW || h !== RH) { renderer.setSize(w, h, false); RW = w; RH = h; } camera.aspect = w / h;
   const sr = stage.getBoundingClientRect(), gh = $('ghud'), gt = $('gtools'), hudH = gh.hidden ? 0 : gh.offsetHeight, strip = !gt.hidden && gt.offsetWidth > w * 0.5 ? gt.offsetHeight : 0;      // strip: 도구가 가로 줄로 펼쳐져 있을 때의 높이
   stage.style.setProperty('--hud-h', hudH + 'px'); stage.style.setProperty('--tv-h', strip + 'px'); stage.classList.toggle('tiny', h - hudH < 300 || w < 380);
@@ -1451,7 +1493,7 @@ function resize() { const w = stage.clientWidth, h = stage.clientHeight, wrap = 
     const fl = parseFloat(getComputedStyle(frontEl).left) || 16; let top = 0;
     const drawerTop = rew && getComputedStyle($('qRew')).position === 'fixed' ? $('qRew').getBoundingClientRect().top - sr.top : 0;      // 보상 시트가 아래에서 올라와 있으면 인셋은 그 위에 놓인다
     const vc = document.querySelector('.voice'); vc.classList.remove('cov');
-    for (const e of [gh, gt, document.querySelector('.hint'), strip ? null : vc]) { if (!e || e.hidden || (e === gt && strip)) continue; const r = e.getBoundingClientRect(); if (r.width && r.height && getComputedStyle(e).visibility !== 'hidden' && r.left - sr.left < fl + INS_W + 8 && r.top - sr.top < h * 0.5) top = Math.max(top, r.bottom - sr.top); }
+    for (const e of [gh, gt, document.querySelector('.hint'), $('snow'), strip ? null : vc]) { if (!e || e.hidden || (e === gt && strip)) continue; const r = e.getBoundingClientRect(); if (r.width && r.height && getComputedStyle(e).visibility !== 'hidden' && r.left - sr.left < fl + INS_W + 8 && r.top - sr.top < h * 0.5) top = Math.max(top, r.bottom - sr.top); }
     const maxH = (drawerTop > 0 ? Math.min(h, drawerTop) - 8 : h - fl) - top - 26; if (maxH < INS_W * 230 / 208) INS_W = Math.max(56, Math.round(maxH * 208 / 230));
     /* 진행 캐릭터 그림도 같은 방식으로: 위의 띠나 도구 칸에 닿으면 줄인다 */
     const hs = $('host'); hs.style.width = hs.style.height = '';
@@ -1470,8 +1512,9 @@ function resize() { const w = stage.clientWidth, h = stage.clientHeight, wrap = 
   if (FRAME.ox || FRAME.oy) camera.setViewOffset(w, h, -FRAME.ox, -FRAME.oy, w, h); else camera.clearViewOffset();
   camera.updateProjectionMatrix();
   TOPY = hudH + (strip ? strip + 8 : 0);
-  OBS = [frontEl, $('host'), document.querySelector('.voice'), document.querySelector('.hint'), strip ? null : gt].filter(e => e && !e.hidden && e.offsetWidth && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none').map(e => { const r = e.getBoundingClientRect(); return [r.left - sr.left - 3, r.top - sr.top - (e === frontEl ? 20 : 3), r.right - sr.left + 3, r.bottom - sr.top + 3]; });
+  OBS = [frontEl, $('host'), document.querySelector('.voice'), document.querySelector('.hint'), $('snow'), strip ? null : gt].filter(e => e && !e.hidden && e.offsetWidth && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none').map(e => { const r = e.getBoundingClientRect(); return [r.left - sr.left - 3, r.top - sr.top - (e === frontEl ? 20 : 3), r.right - sr.left + 3, r.bottom - sr.top + 3]; });
   syncScrim(); }
+placeNow(); MQC.addEventListener('change', () => { placeNow(); resize(); });
 addEventListener('resize', () => { resize(); }); resize(); setView('side', true);
 /* 창 크기는 그대로인데 무대 높이만 바뀌는 경우(문제 카드가 채워지며 아래 칸이 커질 때 등)에도 그림 크기를 맞춘다. 맞추지 않으면 모형이 눌려 보인다 */
 { let sw = stage.clientWidth, sh = stage.clientHeight; new ResizeObserver(() => { if (stage.clientWidth === sw && stage.clientHeight === sh) return; sw = stage.clientWidth; sh = stage.clientHeight; resize(); update(performance.now()); }).observe(stage); }
