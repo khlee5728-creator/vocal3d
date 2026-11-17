@@ -4,6 +4,18 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Articulation in 3D</title>
+<meta name="description" content="See how English consonants and vowels are made in an interactive 3D model of the vocal tract, then test yourself. 영어 자음과 모음이 만들어지는 모습을 3D로 보고 퀴즈로 확인하세요." />
+<link rel="canonical" href="https://khlee5728-creator.github.io/vocal3d/" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Articulation in 3D" />
+<meta property="og:title" content="Articulation in 3D: see how English sounds are made" />
+<meta property="og:description" content="See how English consonants and vowels are made in an interactive 3D model of the vocal tract, then test yourself. 영어 자음과 모음이 만들어지는 모습을 3D로 보고 퀴즈로 확인하세요." />
+<meta property="og:url" content="https://khlee5728-creator.github.io/vocal3d/" />
+<meta property="og:image" content="https://khlee5728-creator.github.io/vocal3d/assets/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="A 3D head cut open from the side, showing the tongue, velum and vocal cords as it makes the sound s" />
+<meta name="twitter:card" content="summary_large_image" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Lora:ital@0;1&family=Space+Grotesk:wght@400;600;700&family=Noto+Serif+KR:wght@300;500&display=swap" rel="stylesheet" />
@@ -1196,7 +1208,7 @@ function select(s) {
   sound = s; phase = 'hold'; phaseT = performance.now(); go(targetOf(s, false));
   dots.forEach((d, i) => { d.userData.u = i / NP; d.userData.b = 0; d.userData.wait = 0; }); burstT = 0; puffs.forEach(m => { m.visible = false; });
   if (quiz && !quiz.done) maskInfo(); else showInfo(s);
-  $('say').hidden = !!(quiz && !quiz.done);      // 문제를 푸는 중에는 단어 듣기를 숨긴다(답이 드러난다)
+  $('say').hidden = !window.speechSynthesis || !!(quiz && !quiz.done);      // 문제를 푸는 중에는 단어 듣기를 숨긴다(답이 드러난다)
   $('voiceLab').innerHTML = s.sym === 'ʔ' ? 'CLOSED' : s.voiced ? 'VOICED<span> · VIBRATING</span>' : 'VOICELESS<span> · APART</span>';      // 좁은 화면에서는 뒤쪽 낱말을 숨긴다
 }
 const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
@@ -1430,7 +1442,7 @@ function setMode(m) {
   const mb = document.querySelector('.modebar'); if (practice) $('ghud').insertBefore(mb, $('ghud').querySelector('.qtimer')); else $('wrap').appendChild(mb);      // 모드 전환 버튼: Practice에서는 위쪽 띠의 줄 안에 넣어 다른 버튼과 높이를 맞춘다
   (practice ? $('gtools') : $('toolsHome')).appendChild($('tools'));      // 보기 도구 묶음을 화면에 맞는 자리로 옮긴다
   placeNow();
-  if (practice) openLobby(); else { clearInterval(qs.tick); clearTimeout(qs.auto); quiz = null; $('qRew').hidden = true; show('none'); $('say').hidden = false; select(VOWELS[5]); }
+  if (practice) openLobby(); else { clearInterval(qs.tick); clearTimeout(qs.auto); quiz = null; $('qRew').hidden = true; show('none'); $('say').hidden = !window.speechSynthesis; select(VOWELS[5]); }
   resize(); setView(lastView, true);      // 모드마다 모형 자리와 크기가 다르다      // 풀던 문제의 답이 모드 전환으로 드러나지 않게 기본 소리로 돌아간다
 }
 for (const [id, label] of QLV) { const b = document.createElement('button'); b.className = 'btn'; b.dataset.lv = id; b.textContent = label; b.onclick = () => { qs.level = id; lobbyMarks(); hud(); }; $('qLevels').appendChild(b); }
